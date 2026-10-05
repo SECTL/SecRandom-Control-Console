@@ -16,3 +16,4 @@ dist/
 # 日志
 *.log
 npm-debug.log*
+/.kagent
