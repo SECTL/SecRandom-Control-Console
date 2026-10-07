@@ -7,6 +7,7 @@
 | `src/SecRandom.Control.Web/` | Web 控制台 | [AGPL-3.0](LICENSE) | 是 |
 | `deploy/`、`scripts/`、根目录文档 | 部署配置、构建脚本、自建文档 | [AGPL-3.0](LICENSE) | 是 |
 | `src/SecRandom.Control/` | 集控服务端实现 | [Elastic License 2.0](src/SecRandom.Control/LICENSE) | 否（source-available） |
+| `src/SecRandom.Control.Identity.Local/` | 本地账号身份源模块（服务端插件，随服务端一起构建进产物） | [Elastic License 2.0](src/SecRandom.Control/LICENSE) | 否（source-available） |
 
 服务端与控制台是两个独立程序（C# 服务进程 + 浏览器里的 JS 应用），只通过 HTTP 与 WebSocket 通信：
 同仓库、同镜像属于**聚合分发**，各部分许可各自生效，不产生新的合并作品，所以这张表可以这么分。
@@ -17,6 +18,9 @@
   共享源文件或源码级 include——AGPL-3.0 是强 copyleft、Elastic-2.0 限制托管服务，两者无法同时满足。
 - ❌ **不得把客户端（GPL-3.0）的代码抄进服务端（Elastic-2.0）**。需要同样的能力，就在服务端按协议
   重新实现。
+- ⚠️ **身份源模块与服务端同侧**：本仓库发布的 `src/SecRandom.Control.Identity.Local/` 是 Elastic-2.0
+  一侧的代码（它以插件方式加载进服务端进程）。自己写的其它身份源模块（飞书 / 钉钉等）也应与服务端
+  保持同一许可策略，且不得引入 `src/SecRandom.Control.Web/` 的 AGPL-3.0 源码。
 - ⚠️ 控制台里的 [`client-settings-pages.ts`](src/SecRandom.Control.Web/src/data/client-settings-pages.ts)
   与 [`client-setting-option-labels.ts`](src/SecRandom.Control.Web/src/data/client-setting-option-labels.ts)
   是客户端设置页的静态快照（GPL-3.0 作品的衍生数据），**必须留在 AGPL-3.0 一侧**（GPLv3 §13 与

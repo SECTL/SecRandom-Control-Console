@@ -29,9 +29,16 @@ public sealed class NodeTokenAuthenticationHandler(
         if (string.IsNullOrWhiteSpace(raw))
             return AuthenticateResult.NoResult();
 
+        if (!NodeTokenService.HasTokenPrefix(raw))
+            return AuthenticateResult.NoResult();
+
         var result = await tokens.AuthenticateAsync(raw, timeProvider.GetUtcNow()).ConfigureAwait(false);
         if (!result.Succeeded)
-            return AuthenticateResult.Fail(Describe(result.Failure));
+        {
+            var reason = Describe(result.Failure);
+            Logger.LogWarning("节点令牌校验失败：{Reason}", reason);
+            return AuthenticateResult.Fail(reason);
+        }
 
         var token = result.Token!;
         var claims = new List<Claim>

@@ -38,5 +38,5 @@ public sealed class NotConfiguredAuthenticationHandler(
 
     
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
-        => Task.FromResult(AuthenticateResult.Fail(FailureReason));
+        => Task.FromResult(AuthenticateResult.NoResult());
 }

@@ -13,7 +13,7 @@
 | | 身份来源 | 谁在跑 | 现状 |
 |---|---|---|---|
 | **官方云** | 官方账号体系（OAuth；我们这边接的是思拓创联账号） | 我们的实例 `secrandom-control.sectl.cn` | 生产可用；运营配置不随本仓库发布 |
-| **自建** | 自有登录：本地账号 / 飞书 / 钉钉 | 你自己 | **开发中**（尚未可用） |
+| **自建** | 自有登录：**本地账号（已随本仓库发布）**、飞书 / 钉钉（这两个是独立模块，开发中） | 你自己 | 服务端、控制台与本地账号身份源都在本仓库，照 [自部署手册](docs/self-host.md) 能直接跑通 |
 | **客户端** | — | `SecRandom`（被控端 Agent） | 生产可用，连官方云即可 |
 
 自建与官方云的区别只在**账号侧**：官方云用官方账号体系；自建实例用你自己的身份源，账号与数据都在
@@ -22,14 +22,17 @@
 
 ## 当前状态
 
-服务端实现已在本仓库，且**不含任何专有身份源代码**：身份源是插件式的，按程序集
-`SecRandom.Control.Identity.<名字>` 在启动时加载，由 `CTRL_AUTH_PROVIDER` 点名。因此本仓库里的服务端
-**能编译、能启动，但没有任何身份源**——登录入口返回 `503 auth_not_configured`，程序化调用的 Bearer
-通道一律 `401`。
+服务端、控制台与**本地账号身份源**都在本仓库，且不含任何专有的第三方账号代码：身份源是插件式的，
+按程序集 `SecRandom.Control.Identity.<名字>` 在启动时加载，由 `CTRL_AUTH_PROVIDER` 点名。
 
-自建所需的首次启动引导（OOBE）与 `local` / `feishu` / `dingtalk` 三种身份源、设备接入码换节点令牌
-正在做，适合先跑通部署链路；在这些落地之前，自建实例只能跑到上面那个"未配置身份源"的状态，**不能
-登录、不能正式上线**。完整部署手册与设计进度不随本仓库发布。
+照本仓库部署出来的实例是**开箱可用**的——首次启动引导（OOBE）第一步选「本地账号」，设一个本机管理员
+账号与密码，就能登录控制台、生成接入码、把设备接进来；OOBE 与设备接入的完整流程见
+[自部署手册](docs/self-host.md)。
+
+本仓库发布其中的 `local` 模块（[`src/SecRandom.Control.Identity.Local/`](src/SecRandom.Control.Identity.Local/)，
+服务端构建时自动一起构建并带入产物）；飞书 / 钉钉模块仍在开发中，官方云用的账号体系不随本仓库发布。
+若一个可用模块都没有：向导的「使用方式」列不出来、`POST /api/setup` 返回 `mode_not_available`、登录入口
+返回 `503 auth_not_configured`，程序化调用的 Bearer 通道一律 `401`。
 
 ## 自己构建
 
@@ -43,6 +46,9 @@ dotnet run --project src/SecRandom.Control
 
 只想改服务端、不动前端时，跳过第一步也能编译：SPA 产物存在才复制，不存在时服务端照常构建
 （只是打开首页没有界面）。
+
+构建服务端时会自动发现同级的身份源模块项目（`src/SecRandom.Control.Identity.*`）一起构建，并把模块
+程序集复制进输出的应用目录——所以本仓库自带的 `local` 模块不需要额外操作就能用。
 
 ## 版本号与发布
 
@@ -73,7 +79,7 @@ docker compose up -d                     # 想钉版本：在 .env 里写 CTRL_I
 | 裸机路线 | 运行：**.NET 10 运行时** + systemd + **nginx ≥ 1.25.1**；构建机另需 **.NET SDK ≥ 10.0.103** 与 **Node ≥ 20.19** |
 | 证书 | 客户端只接受 `https`/`wss`，并校验**每台客户端自己的信任存储**：自签或内网 CA 证书要导入每一台机 |
 
-部署方式见 [`deploy/`](deploy/)；逐项说明见 [自部署手册](https://secrandom.sectl.cn/doc/control/self-host)。
+部署方式见 [`deploy/`](deploy/)；逐项说明见 [自部署手册](docs/self-host.md)。
 
 ## 信任边界
 
@@ -95,10 +101,11 @@ docker compose up -d                     # 想钉版本：在 .env 里写 CTRL_I
 |---|---|---|
 | `src/SecRandom.Control/` | 服务端（ASP.NET Core，.NET 10，SQLite） | Elastic-2.0 |
 | `src/SecRandom.Control.Web/` | Web 控制台（Vue 3 + Vite + Tailwind v4） | AGPL-3.0 |
+| `src/SecRandom.Control.Identity.Local/` | 本地账号身份源模块（插件式加载，构建服务端时自动带入产物） | Elastic-2.0 |
 | `deploy/`、`scripts/` | 部署配置与控制台构建脚本 | AGPL-3.0 |
 
-`control-v1` 的协议规范正文、自建集控的设计与部署手册都**不在本仓库**（协议规范只在私有仓库
-维护，改协议时先改规范、再改实现）；自建用户请看 <https://secrandom.sectl.cn/doc/control/self-host>。
+`control-v1` 的协议规范正文与自建集控的设计文档**不在本仓库**（协议规范只在私有仓库维护，改协议时
+先改规范、再改实现）；自部署的操作手册在 [docs/self-host.md](docs/self-host.md)。
 
 ## 相关仓库
 
@@ -109,7 +116,7 @@ docker compose up -d                     # 想钉版本：在 .env 里写 CTRL_I
 
 | 部分 | 许可 |
 |---|---|
-| 服务端 `src/SecRandom.Control/` | [Elastic License 2.0](src/SecRandom.Control/LICENSE)（源码可见、可自建、不可托管转售） |
+| 服务端 `src/SecRandom.Control/`、本地账号身份源模块 `src/SecRandom.Control.Identity.Local/` | [Elastic License 2.0](src/SecRandom.Control/LICENSE)（源码可见、可自建、不可托管转售） |
 | 控制台 `src/SecRandom.Control.Web/`、`deploy/`、`scripts/`、文档 | [AGPL-3.0](LICENSE) |
 
 被控端客户端（`SecRandom`，GPL-3.0）与本仓库的程序**只通过网络通信**，是各自独立的程序：服务端选

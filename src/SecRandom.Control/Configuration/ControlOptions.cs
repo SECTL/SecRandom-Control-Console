@@ -188,6 +188,8 @@ public sealed class ControlOptions
 
     public bool HideGroupNameOnEnroll { get; set; }
 
+    public bool EnrollmentCodeReusable { get; set; }
+
     public string DataProtectionKeysPath =>
         Path.IsPathRooted(DataProtectionKeysDirectory)
             ? DataProtectionKeysDirectory
@@ -211,6 +213,8 @@ public sealed class ControlOptions
             options.NodeEnrollmentEnabled = enrollmentEnabled;
         if (bool.TryParse(Environment.GetEnvironmentVariable("CTRL_NODE_ENROLL_HIDE_GROUP_NAME"), out var hideGroupName))
             options.HideGroupNameOnEnroll = hideGroupName;
+        if (bool.TryParse(Environment.GetEnvironmentVariable("CTRL_ENROLLMENT_CODE_REUSABLE"), out var reusableCode))
+            options.EnrollmentCodeReusable = reusableCode;
         options.EnrollmentCodeLifetime = TimeSpan.FromMinutes(ClampEnrollmentCodeLifetimeMinutes(
             Environment.GetEnvironmentVariable("CTRL_ENROLLMENT_CODE_LIFETIME_MINUTES"),
             (int)options.EnrollmentCodeLifetime.TotalMinutes));

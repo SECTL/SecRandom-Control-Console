@@ -130,7 +130,7 @@ public static class EnrollmentEndpoints
             case EnrollmentCodeStatus.Revoked:
                 throttle.Record(clientKey);
                 return ApiResults.Gone(ErrorCodes.EnrollmentCodeRevoked);
-            case EnrollmentCodeStatus.Used:
+            case EnrollmentCodeStatus.Used when !settings.EnrollmentCodeReusable:
                 throttle.Record(clientKey);
                 return ApiResults.Gone(ErrorCodes.EnrollmentCodeUsed);
             case EnrollmentCodeStatus.Expired:
@@ -149,7 +149,7 @@ public static class EnrollmentEndpoints
             return ApiResults.Conflict(ErrorCodes.NodeMismatch);
         }
 
-        if (!await codes.TryRedeemAsync(code, nodeId, now, cancellationToken))
+        if (!await codes.TryRedeemAsync(code, nodeId, now, cancellationToken) && !settings.EnrollmentCodeReusable)
         {
             throttle.Record(clientKey);
             return ApiResults.Gone(ErrorCodes.EnrollmentCodeUsed);

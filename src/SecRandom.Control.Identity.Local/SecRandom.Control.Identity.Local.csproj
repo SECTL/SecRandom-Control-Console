@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SecRandom.Control.Identity.Local</RootNamespace>
+    <AssemblyName>SecRandom.Control.Identity.Local</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SecRandom.Control\SecRandom.Control.csproj"
+                      AdditionalProperties="IdentityProviderModuleBuildInProgress=true" />
+  </ItemGroup>
+
+</Project>
