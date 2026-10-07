@@ -37,11 +37,11 @@ dotnet publish src/SecRandom.Control -c Release -o /opt/secrandom-control
 # 用 deploy/secrandom-control.service 起服务，用 deploy/nginx.conf 反代
 ```
 
-> ⚠️ **先 `build-web` 再 `publish`，并且要在发布目录内启动**（`cd /opt/secrandom-control && dotnet SecRandom.Control.dll`）。
-> 控制台产物只在 `artifacts/web` 存在时才会被复制进 `wwwroot`；而服务端把**当前工作目录**当站点根，
-> 在别处启动就找不到 `wwwroot`，现象是首页、`/setup`、静态资源全 404（日志里是
-> `Request reached the end of the middleware pipeline without being handled by application code`）。
-> `deploy/secrandom-control.service` 已经设好 `WorkingDirectory`，手工启动时别漏。
+> ⚠️ **先 `build-web` 再 `publish`**：控制台产物只在 `artifacts/web` 存在时才会被复制进 `wwwroot`。
+> 站点根优先取当前工作目录（内容根）下的 `wwwroot`，那里没有时回落到 **`SecRandom.Control.dll` 所在目录**下的 `wwwroot`，
+> 所以发布产物从任意工作目录启动都能打开首页；两处都没有时静态文件不注册，现象是首页、`/setup`、静态资源全 404
+> （日志里是 `Request reached the end of the middleware pipeline without being handled by application code`）。
+> `deploy/secrandom-control.service` 设了 `WorkingDirectory`，手工启动时保持同样习惯即可。
 
 回源要求（**漏一条就会「登录没反应」或「接入码换不到令牌」**）：
 
@@ -179,7 +179,7 @@ PBKDF2-SHA256（210 000 次迭代、随机盐）派生值。
 
 | 现象 | 先看这里 |
 |---|---|
-| 打开首页 404 / 空白 | 两种原因：①**启动时的工作目录不是发布目录**（站点根=当前工作目录，`wwwroot` 找不到；日志里是 `Request reached the end of the middleware pipeline without being handled by application code`，而 `wwwroot` 明明是齐的）→ 在发布目录内启动或给服务设 `WorkingDirectory`；②SPA 产物没构建或没复制进 `wwwroot`（服务端只在启动时存在 `wwwroot` 才注册静态文件，**先 build-web 再启动**） |
+| 打开首页 404 / 空白 | ①SPA 产物没构建或没复制进 `wwwroot`：服务端只在启动时存在 `wwwroot` 才注册静态文件，**先 build-web 再 publish/启动**（日志里是 `Request reached the end of the middleware pipeline without being handled by application code`）；②`wwwroot` 明明和 `SecRandom.Control.dll` 放在一起还是 404 → 跑的是旧版服务端（站点根还绑着启动目录），升级到当前版本，或临时 `cd` 到发布目录再启动 |
 | 登录点了没反应 | 反代只转了 `/api/`，漏了 `/v1/`；看浏览器 Network 里请求打到哪 |
 | 向导报「安装令牌不正确」 | 令牌随每次未初始化启动重新生成，用日志里最新那串 |
 | 设备一直「已接入但离线」 | 设备侧的节点通道没连上：地址应是 `https`/`wss`，且证书已在设备信任存储里 |
@@ -188,7 +188,6 @@ PBKDF2-SHA256（210 000 次迭代、随机盐）派生值。
 ## 还没做完
 
 - 飞书 / 钉钉身份源；
-- 把站点根（`WebRootPath`）固定到应用目录，让发布产物从任意工作目录启动都能找到 `wwwroot`（现在靠「在发布目录内启动 / 设 `WorkingDirectory`」）；
 - 节点令牌轮换与周期重认证（当前只有显式撤销 + 到期）；
 - 客户端令牌存储的平台级加固（计划在目录 ACL 之上再绑系统密钥）；
 - 控制台对「手机接入（控制端）」与「离线被控端」的展示区分。
