@@ -37,13 +37,19 @@ dotnet publish src/SecRandom.Control -c Release -o /opt/secrandom-control
 # 用 deploy/secrandom-control.service 起服务，用 deploy/nginx.conf 反代
 ```
 
+> ⚠️ **先 `build-web` 再 `publish`，并且要在发布目录内启动**（`cd /opt/secrandom-control && dotnet SecRandom.Control.dll`）。
+> 控制台产物只在 `artifacts/web` 存在时才会被复制进 `wwwroot`；而服务端把**当前工作目录**当站点根，
+> 在别处启动就找不到 `wwwroot`，现象是首页、`/setup`、静态资源全 404（日志里是
+> `Request reached the end of the middleware pipeline without being handled by application code`）。
+> `deploy/secrandom-control.service` 已经设好 `WorkingDirectory`，手工启动时别漏。
+
 回源要求（**漏一条就会「登录没反应」或「接入码换不到令牌」**）：
 
 | 项 | 要求 |
 |---|---|
 | 反代路径 | `/api/` 与 `/v1/` **都要**转发到服务端（只转 `/api/` 会让设备通道 404） |
 | WebSocket | `/v1/node/connect` 必须支持升级（nginx 需 `Upgrade`/`Connection` 头） |
-| 缓存 | `index.html` 与 `version.json` 不缓存，带哈希的静态资源可长缓存 |
+| 缓存 | `index.html` 不缓存，带哈希的静态资源可长缓存；`version.json` 若存在也不缓存（当前源码构建不产出它，`deploy/nginx.conf` 里那条规则留着无副作用） |
 | HTTPS | 客户端只接受 `https`/`wss` 并校验**每台客户端自己的信任存储**：自签或内网 CA 证书必须导入每一台机 |
 | systemd | 不要开 `MemoryDenyWriteExecute`（.NET JIT 需要 W+X 页，开了服务起不来且报错不说明原因） |
 
@@ -67,6 +73,9 @@ docker compose logs secrandom-control | grep 安装令牌                      #
 
 **每次以未初始化状态重启都会重新生成令牌，旧的立刻作废**。如果你把日志窗口关了、或者中途重启过服务，
 请用最新那串。
+
+初始化完成之前，服务端是 fail-closed 的：`/v1/**` 一律返回 `409 not_configured`
+（`/v1/meta` 也一样，不会先给一个空的 `auth_mode`）；`/healthz`、`/api/setup*`、`/api/auth/*` 照常可用。
 
 选「本地账号」后，向导会让你设本机管理员账号与密码，之后用它在控制台登录。这个模式下不提供成员功能
 （邀请、成员列表、转移都不会出现），权限模型是「本机管理员 = 这套实例的 owner」。
@@ -121,6 +130,9 @@ PBKDF2-SHA256（210 000 次迭代、随机盐）派生值。
 | `CTRL_DATA_ROOT`（`/var/lib/secrandom-control`） | 数据目录：`control.db`、签名密钥、会话、审计都在这里，**必须持久化** |
 | `CTRL_LISTEN_URL`（`http://127.0.0.1:8791`） | 监听地址；放在反代后面就保持只听本机 |
 | `CTRL_AUTH_COOKIE_SECURE`（`true`） | 会话 Cookie 是否只走 HTTPS；**只在本地 http 试跑时**设 `false` |
+| `CTRL_AUTH_SESSION_LIFETIME`（`7` 天） | 登录会话有效期；必须 >0 且 ≤400 天，越界拒绝启动 |
+| `CTRL_AUTH_SESSION_REVALIDATION_INTERVAL`（`5` 分钟） | 会话重校验间隔；必须 >0 且 ≤会话期 |
+| `CTRL_AUTH_SESSION_VERIFICATION_GRACE`（`1` 小时） | 会话过期后的宽限窗口；取值 0–7 天 |
 | `CTRL_AUTH_PROVIDER` | 身份源名（`local` / `feishu` / `dingtalk` / 官方云） |
 | `CTRL_SETUP_TOKEN` | 预设安装令牌；不设就每次未初始化启动重新生成 |
 | `CTRL_SIGNING_KEY_PATH` | 签名密钥路径（下发给设备的策略/名单要签名，验签失败设备即拒绝） |
@@ -167,7 +179,7 @@ PBKDF2-SHA256（210 000 次迭代、随机盐）派生值。
 
 | 现象 | 先看这里 |
 |---|---|
-| 打开首页 404 / 空白 | SPA 产物没构建或没复制进 `wwwroot`；服务端只在启动时存在 `wwwroot` 才注册静态文件，**先构建再启动** |
+| 打开首页 404 / 空白 | 两种原因：①**启动时的工作目录不是发布目录**（站点根=当前工作目录，`wwwroot` 找不到；日志里是 `Request reached the end of the middleware pipeline without being handled by application code`，而 `wwwroot` 明明是齐的）→ 在发布目录内启动或给服务设 `WorkingDirectory`；②SPA 产物没构建或没复制进 `wwwroot`（服务端只在启动时存在 `wwwroot` 才注册静态文件，**先 build-web 再启动**） |
 | 登录点了没反应 | 反代只转了 `/api/`，漏了 `/v1/`；看浏览器 Network 里请求打到哪 |
 | 向导报「安装令牌不正确」 | 令牌随每次未初始化启动重新生成，用日志里最新那串 |
 | 设备一直「已接入但离线」 | 设备侧的节点通道没连上：地址应是 `https`/`wss`，且证书已在设备信任存储里 |
@@ -176,6 +188,7 @@ PBKDF2-SHA256（210 000 次迭代、随机盐）派生值。
 ## 还没做完
 
 - 飞书 / 钉钉身份源；
+- 把站点根（`WebRootPath`）固定到应用目录，让发布产物从任意工作目录启动都能找到 `wwwroot`（现在靠「在发布目录内启动 / 设 `WorkingDirectory`」）；
 - 节点令牌轮换与周期重认证（当前只有显式撤销 + 到期）；
 - 客户端令牌存储的平台级加固（计划在目录 ACL 之上再绑系统密钥）；
 - 控制台对「手机接入（控制端）」与「离线被控端」的展示区分。
