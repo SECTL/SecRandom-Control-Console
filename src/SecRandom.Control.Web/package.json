@@ -1,0 +1,38 @@
+{
+  "name": "secrandom-control-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SecRandom 集控台 —— Web 控制台（AGPL-3.0，见仓库根 LICENSING.md）。与 SECTL-auth 保持同栈：Vue 3 + Vite + Tailwind v4。",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.app.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.52.0",
+    "@vueuse/core": "^14.2.1",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.13",
+    "vue-i18n": "^11.1.12",
+    "vue-router": "^4.5.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.15",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "@vue/test-utils": "^2.4.10",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.0.15",
+    "typescript": "^5.7.0",
+    "vite": "^6.1.0",
+    "vitest": "^4.1.5",
+    "vue-tsc": "^2.2.0"
+  }
+}

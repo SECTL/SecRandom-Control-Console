@@ -1,0 +1,741 @@
+/* =====================================================================
+ * 控制台外壳（console chrome）= 桌面客户端皮肤
+ *
+ * 目标：**只有 `/console/**`** 这一片（侧栏 + 页头 + 卡片 + 控件 + 对话框 +
+ * 空态）看起来和 SecRandom 桌面端是同一个产品；站点首页 / 登录页 / 加入页
+ * 保持官网那套品牌视觉，不动。
+ *
+ * 三条实现约束（决定了下面每一条规则长什么样）：
+ *
+ *  1. **令牌而不只是颜色**。`--cn-*` 是客户端那套 Fluent 2 令牌，逐值来自
+ *     `client-theme.css`（本文件只 import、不修改它）。控制台原来的
+ *     `--color-*` 语义令牌在这里**重新指向** `--cn-*`，于是
+ *     `bg-surface` / `text-text-muted` / `border-border-base` 这一大批既有
+ *     工具类一次性换成客户端的浅色与深色取值 —— 不必逐个组件改类名，
+ *     也就不会漏掉某个面板。
+ *
+ *  2. **作用域靠 `body:has(.console-shell)`，而不是给每个组件加皮**。
+ *     挂 `class="client-ui"` 的地方（`components/client/fluent/**`）自带那套皮；
+ *     控制台的外壳散在十几个组件里，只在最外层 `<body>` 上做一次判定最省事，
+ *     而且**弹出层 / Teleport / 原生 `<select>` 下拉**这些跑到 body 下的东西
+ *     也一并跟着变。
+ *
+ *     为什么是 `:has()` 而不是给 `<body>` 加 class：`<body>` 不归本目录的
+ *     任何组件所有，改它要么动 `index.html`（那会让所有主题判定多一个来源），
+ *     要么指望某个组件在卸载时清理 class（会漏）。`:has()` 是**纯选择器**，
+ *     进控制台自动命中、离开自动失效，没有任何状态要维护。
+ *
+ *  3. **级联顺序靠源码顺序，不靠 `!important`**。整个文件一个 `!important`
+ *     都没有：需要压过 `main.css` 的规则时，选择器写成 `body:has(.console-shell) …`
+ *     ——它在 CSS 变量上是 `(0,1,1)`、在普通规则上比 `html[data-theme='light']`
+ *     多一层 `body:has()` 的 (0,1,0)，再加上本文件在 `main.css` 里
+ *     **后 import**，两条都赢。这样将来谁要覆盖这里的一条规则，
+ *     写一个更靠后的选择器就行，不必跟 `!important` 打架。
+ * ===================================================================== */
+
+/* ---------------------------------------------------------------------
+ * 1. 令牌重定向
+ * --------------------------------------------------------------------- */
+
+/* 字体：客户端默认字体是 MiSans。`--font-sans` 被 main.css 的 body 规则消费，
+   因此改这一个变量，控制台里所有继承字体的文字都跟着换。 */
+body:has(.console-shell) {
+  --font-sans: 'MiSans', system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+
+  /* 圆角：客户端卡片/控件 4px、对话框 8px（`--cn-radius-control` / `--cn-radius-dialog`）。
+     控制台原来 10px / 6px —— 圆角是"像不像客户端"里最容易被一眼看出来的那一档。 */
+  --radius-card: var(--cn-radius-control);
+  --radius-control: var(--cn-radius-control);
+
+  /* 控制台右侧工作面的宽度上限（`.console-page` / 设备详情页用）。
+     客户端 `StylesBase.axaml` 的 MaxWidth 是 960，控制台起先也统一到 960；
+     但控制台这一片要放**七列的审计表**（时间/事件/对象/明细/操作人/来源设备/结果，
+     表自身 `min-w-[880px]`）和节点列表，960 减掉左右内边距后只剩 930 给表格，
+     几列只能折成两三行（"读取名单 / roster.read:queryb" 这种断行就是这么来的）。
+     所以控制台单独放宽一档；客户端的 960 仍然留在 `--cn-page-max-width` 里，
+     `client-theme.css` 一个字节都不用动。 */
+  --cn-console-page-max-width: 1120px;
+
+  /* 深色（默认）：控制台原来的取值 → 客户端 Fluent 2 的取值。
+     左边是控制台旧的 `@theme` / `:root` 值，右边是 `--cn-*`。 */
+  --color-surface-bg: var(--cn-window);
+  --color-surface: var(--cn-card-bg-solid);
+  --color-surface-2: var(--cn-control-alt-fill);
+  --color-surface-3: var(--cn-subtle-hover);
+  --color-border-base: var(--cn-card-edge);
+  --color-border-strong: var(--cn-control-border);
+  --color-text-base: var(--cn-text);
+  --color-text-muted: var(--cn-text-secondary);
+  --color-text-faint: var(--cn-text-disabled);
+  --color-brand: var(--cn-accent);
+  --color-brand-hover: var(--cn-accent-hover);
+  /* `brand-bright` 在控制台里当"强调文字色"用（在线、当前项、链接悬停），
+     深色下强调色本身就是亮蓝，直接用 accent 即可。 */
+  --color-brand-bright: var(--cn-accent);
+  --color-brand-soft: var(--cn-accent-hover);
+  --color-info: var(--cn-accent);
+  --color-warn: var(--cn-warn);
+  --color-danger: var(--cn-danger);
+  --color-ok: var(--cn-ok);
+  --color-privileged: var(--cn-accent);
+
+  /* 动效里那些"白色叠加"与"黑色阴影"：客户端的卡片几乎没有阴影，
+     叠加层也换成它那套描边色。 */
+  --grid-dot: transparent;
+  --grid-dot-strong: transparent;
+  --shimmer-sheen: var(--cn-subtle-hover);
+  --shadow-card: rgb(0 0 0 / 0.14);
+  --scrollbar-hover: var(--cn-scroll-thumb);
+}
+
+/* 浅色：同一批令牌，换成客户端浅色下的取值。
+   选择器要带 `html[data-theme='light']` 才压得过 main.css 里那一段同样带
+   `html[data-theme='light']` 的覆盖（两边同权重，本文件后加载 ⇒ 这里赢）。 */
+html[data-theme='light'] body:has(.console-shell) {
+  --color-surface-bg: var(--cn-window);
+  --color-surface: var(--cn-card-bg-solid);
+  --color-surface-2: var(--cn-control-alt-fill);
+  --color-surface-3: var(--cn-subtle-hover);
+  --color-border-base: var(--cn-card-edge);
+  --color-border-strong: var(--cn-control-border);
+  --color-text-base: var(--cn-text);
+  --color-text-muted: var(--cn-text-secondary);
+  --color-text-faint: var(--cn-text-disabled);
+  --color-brand: var(--cn-accent);
+  --color-brand-hover: var(--cn-accent-hover);
+  --color-brand-bright: var(--cn-accent);
+  --color-brand-soft: var(--cn-accent-hover);
+  --color-info: var(--cn-accent);
+  --color-warn: var(--cn-warn);
+  --color-danger: var(--cn-danger);
+  --color-ok: var(--cn-ok);
+  --color-privileged: var(--cn-accent);
+
+  --shimmer-sheen: var(--cn-subtle-hover);
+  --shadow-card: rgb(0 0 0 / 0.12);
+}
+
+/* ---------------------------------------------------------------------
+ * 2. 窗口底板：去掉站点点阵，换成客户端那层很淡的 Mica 渐变。
+ *    `.console-shell` 自己画内容区底色，这里只管"最外面那一层"。
+ * --------------------------------------------------------------------- */
+body:has(.console-shell) {
+  background-color: var(--cn-window);
+  background-image: var(--cn-window-mica);
+  background-size: auto;
+  color: var(--cn-text);
+  font-family: var(--font-sans);
+  font-size: var(--cn-fs-m);
+  line-height: 1.4;
+  color-scheme: dark;
+}
+
+html[data-theme='light'] body:has(.console-shell) {
+  color-scheme: light;
+}
+
+/* 控制台自己的图标盒（`components/ConsoleIcon.vue`）。
+   `.client-ui .cn-fi` 那一套只在客户端面板里生效（选择器带 `.client-ui`），
+   控制台外壳不在那棵子树里，所以这里补一份**只有几何**的定义；
+   字体族与字形内容由 `ConsoleIcon.vue` 自己的 scoped 样式给出。 */
+body:has(.console-shell) .cn-fi {
+  display: inline-block;
+  flex: none;
+  line-height: 1;
+  /* 字形是等宽方框里的一个字符，盒子比字形宽时左对齐会让图标看起来"没有居中"。
+     客户端那边图标盒就是紧贴字形的，居中后 16px 的盒子与 16px 的字形完全重合。 */
+  text-align: center;
+}
+
+/* 滚动条：客户端是 12px 宽、半透明滑块。 */
+body:has(.console-shell) ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+body:has(.console-shell) ::-webkit-scrollbar-thumb {
+  border: 4px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+  background-color: var(--cn-scroll-thumb);
+}
+body:has(.console-shell) ::-webkit-scrollbar-track {
+  background: transparent;
+}
+body:has(.console-shell) * {
+  scrollbar-color: var(--cn-scroll-thumb) transparent;
+}
+
+/* 焦点环：客户端是"控件自己描边变深 + 底部加粗"，不是一圈发光的外框。
+   这里把 main.css 那条 `outline: 2px solid var(--color-brand-bright)` 收掉，
+   换成 Fluent 那套（各控件规则里再单独画）。 */
+body:has(.console-shell) :where(a, button, select, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--cn-text);
+  outline-offset: -1px;
+  border-radius: var(--cn-radius-control);
+}
+body:has(.console-shell) :where(input, select, textarea):focus-visible {
+  outline: none;
+}
+
+/* 控制台是应用式界面：内容区自己滚，窗口不滚。
+   `ScrollProgress` 是站点那套"长页面"的装饰（顶部一条渐变进度线），
+   客户端里没有这个部件，控制台里也不该有。 */
+body:has(.console-shell) .scroll-progress {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------
+ * 3. 外壳：左侧 NavigationView（272px）+ 右侧内容区
+ *    客户端：导航窗格 #F3F3F3 / 内容区 #F9F9F9（深色 #202020 / #272727）。
+ * --------------------------------------------------------------------- */
+body:has(.console-shell) .console-shell {
+  min-height: 100vh;
+  background: var(--cn-content-bg);
+}
+
+body:has(.console-shell) .console-shell__aside {
+  width: 272px;
+  gap: 4px;
+  padding: 4px 0 8px;
+  background: var(--cn-nav-pane);
+  border-right: 1px solid var(--cn-divider);
+}
+
+body:has(.console-shell) .console-shell__main {
+  background: var(--cn-content-bg);
+}
+
+/* 品牌区：客户端标题栏里那一行（图标 28px + 产品名 + 副标题），
+   底下用一条分隔线收边，而不是一条"整宽边框"。 */
+body:has(.console-shell) .console-brand {
+  gap: 10px;
+  padding: 6px 12px 12px;
+  border-bottom: 1px solid var(--cn-divider);
+}
+body:has(.console-shell) .console-brand img {
+  height: 28px;
+  width: 28px;
+  border-radius: 6px;
+}
+body:has(.console-shell) .console-brand .console-brand__name {
+  font-size: var(--cn-fs-m);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--cn-text);
+}
+body:has(.console-shell) .console-brand .console-brand__sub {
+  font-size: 11px;
+  color: var(--cn-text-secondary);
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------------------
+ * 4. 侧栏导航项（`NavigationView` 的 MenuItem）
+ *    36px 行高、12px 内缩、4px 圆角、悬停一层 3.7% 填充、
+ *    当前项：填充 + 左侧 3px 强调条 + 600 字重。
+ * --------------------------------------------------------------------- */
+body:has(.console-shell) .console-shell__nav {
+  gap: 0;
+  padding: 0 4px;
+}
+
+body:has(.console-shell) .console-nav__item {
+  height: 36px;
+  gap: 12px;
+  padding: 0 12px;
+  margin: 2px 0;
+  border-radius: var(--cn-radius-control);
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+body:has(.console-shell) .console-nav__item:hover {
+  background: var(--cn-nav-item-hover);
+  color: var(--cn-text);
+}
+body:has(.console-shell) .console-nav__item:active {
+  background: var(--cn-nav-item-pressed);
+}
+/* `.nav-item[data-active='true']::before` 在 main.css 里是一条带发光的
+   2px 渐变竖条（站点风格）。控制台换成客户端那条 3px、无发光、圆角 2px
+   的指示条，位置也挪到贴着左边缘（客户端是贴边的）。 */
+body:has(.console-shell) .nav-item[data-active='true']::before {
+  left: 0;
+  width: 3px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 2px;
+  background: var(--cn-accent);
+  box-shadow: none;
+}
+body:has(.console-shell) .nav-item[data-active='true'] .icon {
+  color: var(--cn-text);
+}
+body:has(.console-shell) .console-nav__item[data-active='true'] {
+  background: var(--cn-nav-item-hover);
+}
+body:has(.console-shell) .console-nav__item[data-active='true'] span {
+  font-weight: 600;
+}
+/* 「我的组 / 加入的组」在侧栏里是等宽的两段，客户端那一档是 32px 高 */
+body:has(.console-shell) .console-shell__aside .console-segment {
+  width: 100%;
+}
+body:has(.console-shell) .console-shell__aside .console-segment__item {
+  height: 32px;
+  font-size: 12.5px;
+  padding: 0 8px;
+}
+
+/* 侧栏底部：主题 / 语言 / 账号。每条 36px 行高，悬停一层填充。 */
+body:has(.console-shell) .console-shell__aside .console-icon-btn,
+body:has(.console-shell) .console-shell__aside .console-select {
+  color: var(--cn-text-secondary);
+}
+body:has(.console-shell) .console-shell__aside .console-icon-btn:hover,
+body:has(.console-shell) .console-shell__aside .console-select:hover {
+  background: var(--cn-subtle-hover);
+  color: var(--cn-text);
+  border-color: transparent;
+}
+body:has(.console-shell) .console-shell__aside .console-account__trigger {
+  padding: 4px 8px;
+  gap: 10px;
+}
+body:has(.console-shell) .console-shell__aside .console-account__trigger:hover {
+  background: var(--cn-subtle-hover);
+}
+
+/* ---------------------------------------------------------------------
+ * 5. 页头与页面容器
+ *    客户端 StylesBase.axaml：标题 28px/600、内容最大宽 960、
+ *    内边距 12/18/12/12、纵向间距 4。
+ *
+ *    控制台的页面用 `max-w-4xl`(896) / `max-w-5xl`(1024) 这两个上界，
+ *    这里统一到同一档，并把页头抬到 28px。这一档比客户端的 960 **宽一档**
+ *    （`--cn-console-page-max-width`，理由见该令牌处）：控制台的面板比客户端
+ *    那些折叠卡片宽——七列审计表在 960 下会把单元格内容挤成折行。
+ * --------------------------------------------------------------------- */
+body:has(.console-shell) .console-page {
+  max-width: var(--cn-console-page-max-width);
+  padding: 12px 18px 32px 12px;
+  gap: 8px;
+}
+body:has(.console-shell) .console-page__title {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+body:has(.console-shell) .console-page__sub {
+  font-size: 12px;
+}
+
+/* 卡片 / 面板：客户端 FAExpander 那套
+   —— 4px 圆角、1px 描边（下沿更深一档）、半透明卡片底、没有投影。 */
+body:has(.console-shell) .console-card,
+body:has(.console-shell) .console-panel {
+  background: var(--cn-card-bg);
+  border: 1px solid var(--cn-card-edge);
+  border-top-color: var(--cn-card-edge-top);
+  border-bottom-color: var(--cn-card-edge-bottom);
+  border-radius: var(--cn-radius-control);
+  box-shadow: none;
+}
+body:has(.console-shell) .console-panel {
+  overflow: hidden;
+}
+
+/* 卡片悬停：客户端卡片**不位移、不发光**，只把描边抬一档。
+   `.spotlight-card` 那套"-2px + 柔光 + 渐变描边"属于站点首页，控制台里关掉。 */
+body:has(.console-shell) .console-card:hover,
+body:has(.console-shell) .console-panel:hover {
+  transform: none;
+  border-color: var(--cn-control-border);
+  box-shadow: none;
+}
+body:has(.console-shell) .spotlight-card__glow,
+body:has(.console-shell) .spotlight-card__ring {
+  display: none;
+}
+
+/* 统计卡（组详情页页头那四张）：数值用客户端的字号级差，不要 23px 的粗体。 */
+body:has(.console-shell) .console-stat__value {
+  font-size: var(--cn-fs-3xl);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* 列表行：客户端 DataGrid / ListView 是 40px 行高 + 悬停填充 + 横向分隔线。 */
+body:has(.console-shell) .console-list__row {
+  min-height: 56px;
+  padding: 10px 16px;
+}
+body:has(.console-shell) .console-list__row:hover {
+  background-color: var(--cn-grid-row-hover);
+}
+
+/* ---------------------------------------------------------------------
+ * 5b. 设备详情页（`views/NodeDetailView.vue`）
+ *
+ * 这一页**不归本次改动所有**（另一个写入方正在改它），所以一个字符都没有动。
+ * 它内部有 8 处卡片是直接写 `rounded-card border border-border-base bg-surface`
+ * 的，没有额外的 class 可以挂。这里用一个**属性子串选择器**把它们收进
+ * `.console-page` 作用域里——选择器只在控制台内生效，也只命中这一页，
+ * 且不改变任何结构、类名与行为。将来那一页加了正式的类名，
+ * 这条规则可以整段删掉，不会有别的影响。
+ *
+ * ⚠️ `:not(.console-dialog)` 不能省。模态框在 DOM 里就住在 `.console-page` **里面**
+ * （`fixed inset-0` 只改画的位置，不改它在树上的位置），而它们的卡片也是
+ * `rounded-card … bg-surface`：不排除掉，对话框会被涂成**半透明**的卡片底
+ * （`--cn-card-bg` 是带 alpha 的），背后的页面文字直接透上来，圆角也从对话框的 8px
+ * 被压成控件的 4px。四个模态框（重命名组 / 移除成员 / 撤销邀请 / 新建组）都吃这一口。
+ * 实测：`artifacts/console-repro/b-rename-dialog.png`。
+ * --------------------------------------------------------------------- */
+body:has(.console-shell) .console-page [class~='rounded-card'][class~='bg-surface']:not(
+    .console-dialog
+  ) {
+  background: var(--cn-card-bg);
+  border-top-color: var(--cn-card-edge-top);
+  border-bottom-color: var(--cn-card-edge-bottom);
+  border-radius: var(--cn-radius-control);
+  box-shadow: none;
+}
+body:has(.console-shell)
+  .console-page
+  [class~='rounded-card'][class~='bg-surface']:not(.console-dialog):hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* 空态：客户端是一块居中的浅色底 + 一个图标 + 一句话。 */
+body:has(.console-shell) .console-empty {
+  border: 1px dashed var(--cn-control-border);
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-info-bg);
+  padding: 16px;
+  text-align: center;
+  color: var(--cn-text-secondary);
+  font-size: var(--cn-fs-m);
+}
+body:has(.console-shell) .console-empty__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: var(--cn-control-alt-fill);
+  border: 1px solid var(--cn-control-border);
+  color: var(--cn-text-secondary);
+}
+/* 空态那个"呼吸的光环"是站点首页的花样，客户端的空态是静态的。 */
+body:has(.console-shell) .icon-halo::before {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------
+ * 6. 分段控件（Segmented / TabView）
+ *    客户端：32px 高、4px 圆角；**未选中是透明的**，选中项才是一块强调色。
+ *    控制台原来的写法是"灰底胶囊 + 白色滑块"，那是另一种产品的手感。
+ * --------------------------------------------------------------------- */
+body:has(.console-shell) .console-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+  background: transparent;
+  border-radius: 0;
+}
+body:has(.console-shell) .console-segment__item {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  color: var(--cn-text-secondary);
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  box-shadow: none;
+}
+body:has(.console-shell) .console-segment__item:hover {
+  background: var(--cn-subtle-hover);
+  color: var(--cn-text);
+}
+body:has(.console-shell) .console-segment__item[aria-selected='true'] {
+  background: var(--cn-accent);
+  color: var(--cn-on-accent);
+  font-weight: 600;
+}
+body:has(.console-shell) .console-segment__item .console-segment__count {
+  background: transparent;
+  color: inherit;
+  opacity: 0.75;
+  padding: 0;
+  font-size: 11px;
+}
+
+/* 页签（组详情页的 节点/成员/邀请/审计）：客户端是"选中项下沿一条强调色"，
+   控制台已经是这个做法，这里只把度量与字重对齐。 */
+body:has(.console-shell) .console-tabs__item {
+  height: 40px;
+  padding: 0 12px;
+  font-size: var(--cn-fs-m);
+  border-bottom-width: 2px;
+}
+body:has(.console-shell) .console-tabs__item[data-active='true'] {
+  border-bottom-color: var(--cn-accent);
+  color: var(--cn-text);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------
+ * 7. 控件：按钮 / 输入框 / 下拉
+ *    Fluent 2 的 Button：32px 高、4px 圆角、1px 描边（下沿深一档）、
+ *    悬停换一层填充。主按钮是强调色实心。
+ * --------------------------------------------------------------------- */
+body:has(.console-shell) :where(button, a).console-btn {
+  height: 32px;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: var(--cn-radius-control);
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  background: var(--cn-control-fill);
+  color: var(--cn-text);
+  font-family: inherit;
+  /* 客户端 Button 的字号就是 14px（StylesBase 的 FontSizeM）。
+     控制台原来逐处写 11.5/12/12.5px，那是"密集面板"的取值，
+     批量工具栏里五六颗按钮并排时，字号不统一比尺寸不统一更明显。 */
+  font-size: var(--cn-fs-m);
+  font-weight: 400;
+  box-shadow: none;
+}
+body:has(.console-shell) :where(button, a).console-btn:hover:not(:disabled) {
+  background: var(--cn-control-fill-hover);
+  border-color: var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  transform: none;
+  box-shadow: none;
+}
+body:has(.console-shell) :where(button, a).console-btn:active:not(:disabled) {
+  background: var(--cn-control-fill-pressed);
+}
+body:has(.console-shell) :where(button, a).console-btn:disabled {
+  color: var(--cn-text-disabled);
+  background: var(--cn-control-alt-fill);
+  border-color: var(--cn-control-border);
+}
+body:has(.console-shell) :where(button, a).console-btn--accent {
+  background: var(--cn-accent);
+  border-color: var(--cn-accent);
+  color: var(--cn-on-accent);
+  font-weight: 400;
+}
+body:has(.console-shell) :where(button, a).console-btn--accent:hover:not(:disabled) {
+  background: var(--cn-accent-hover);
+  border-color: var(--cn-accent-hover);
+}
+body:has(.console-shell) :where(button, a).console-btn--accent:active:not(:disabled) {
+  background: var(--cn-accent-pressed);
+  border-color: var(--cn-accent-pressed);
+}
+body:has(.console-shell) :where(button, a).console-btn--accent:disabled {
+  background: var(--cn-control-alt-fill);
+  border-color: var(--cn-control-border);
+  color: var(--cn-text-disabled);
+}
+/* 危险动作：客户端用 Critical 色，但**不填满**（填满的红按钮在密集面板里太响） */
+body:has(.console-shell) :where(button, a).console-btn--danger {
+  color: var(--cn-danger);
+  border-color: var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  background: var(--cn-control-fill);
+}
+body:has(.console-shell) :where(button, a).console-btn--danger:hover:not(:disabled) {
+  background: var(--cn-crit-bg);
+}
+/* 纯图标按钮：32×32 方形、无描边、悬停一层填充 */
+body:has(.console-shell) .console-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  color: var(--cn-text);
+}
+body:has(.console-shell) .console-icon-btn:hover:not(:disabled) {
+  background: var(--cn-subtle-hover);
+}
+body:has(.console-shell) .console-icon-btn:disabled {
+  color: var(--cn-text-disabled);
+}
+
+/* 输入框：32px 高、4px 圆角、描边下沿更深；聚焦时**底部加粗**（Fluent 的做法）。 */
+body:has(.console-shell) .console-input {
+  height: 32px;
+  padding: 0 11px;
+  border-radius: var(--cn-radius-control);
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  background: var(--cn-control-fill);
+  color: var(--cn-text);
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  outline: 0;
+}
+body:has(.console-shell) .console-input:hover:not(:disabled) {
+  background: var(--cn-control-fill-hover);
+}
+body:has(.console-shell) .console-input:focus,
+body:has(.console-shell) .console-input:focus-visible {
+  background: var(--cn-control-fill);
+  border-color: var(--cn-text);
+  border-bottom-width: 2px;
+  outline: none;
+}
+body:has(.console-shell) .console-input::placeholder {
+  color: var(--cn-text-secondary);
+}
+body:has(.console-shell) .console-input:disabled {
+  color: var(--cn-text-disabled);
+  background: var(--cn-control-alt-fill);
+}
+
+/* 原生下拉（语言选择、成员角色）：外观向 ComboBox 靠。 */
+body:has(.console-shell) .console-select {
+  height: 32px;
+  padding: 0 26px 0 11px;
+  border-radius: var(--cn-radius-control);
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  background-color: var(--cn-control-fill);
+  color: var(--cn-text);
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+}
+body:has(.console-shell) .console-select:hover {
+  background-color: var(--cn-control-fill-hover);
+}
+body:has(.console-shell) .console-select:focus-visible {
+  border-color: var(--cn-text);
+  border-bottom-width: 2px;
+  outline: none;
+}
+
+/* 复选框：客户端 DataGridCheckBoxColumn 是 20×20、4px 圆角、选中填强调色。 */
+body:has(.console-shell) input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border-radius: 4px;
+  accent-color: var(--cn-accent);
+}
+
+/* 徽章 / 计数：客户端是 20px 高的圆角小块，不是 999px 的胶囊。 */
+body:has(.console-shell) .console-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--cn-control-border);
+  background: var(--cn-control-alt-fill);
+  color: var(--cn-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 分隔线 */
+body:has(.console-shell) .console-divider {
+  background: var(--cn-divider);
+}
+
+/* ---------------------------------------------------------------------
+ * 8. 浮出层：对话框 / 遮罩 / 弹出菜单
+ *    客户端 ContentDialog：整屏 40% 黑遮罩 + 8px 圆角卡片 + 右对齐两个按钮。
+ * --------------------------------------------------------------------- */
+body:has(.console-shell) .console-scrim {
+  background: rgba(0, 0, 0, 0.4);
+}
+body:has(.console-shell) .console-dialog {
+  background: var(--cn-card-bg-solid);
+  border: 1px solid var(--cn-card-edge);
+  border-radius: var(--cn-radius-dialog);
+  padding: 20px 24px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+body:has(.console-shell) .console-dialog__title {
+  font-size: var(--cn-fs-2xl);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+body:has(.console-shell) .console-dialog__foot {
+  gap: 8px;
+  padding-top: 20px;
+}
+
+/* 弹出菜单（账号菜单）：客户端 Flyout —— 4px 圆角、实心底、8/16 投影、32px 行高。 */
+body:has(.console-shell) .console-popover {
+  padding: 4px;
+  border-radius: var(--cn-radius-overlay);
+  border: 1px solid var(--cn-card-edge);
+  background: var(--cn-card-bg-solid);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+body:has(.console-shell) .console-menu__item {
+  height: 32px;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: var(--cn-radius-control);
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+}
+body:has(.console-shell) .console-menu__item:hover,
+body:has(.console-shell) .console-menu__item:focus-visible {
+  background: var(--cn-subtle-hover);
+  color: var(--cn-text);
+  outline: none;
+}
+body:has(.console-shell) .console-menu__item:disabled {
+  color: var(--cn-text-disabled);
+}
+
+/* 提示条：客户端的 InfoBar —— 4px 圆角、1px 描边、一句 12px 说明。 */
+body:has(.console-shell) .console-note {
+  border-radius: var(--cn-radius-control);
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 16px;
+}
+body:has(.console-shell) .console-note--fail {
+  border-color: var(--cn-danger);
+  background: var(--cn-crit-bg);
+  color: var(--cn-danger);
+}
+body:has(.console-shell) .console-note--warn {
+  border-color: var(--cn-warn);
+  background: var(--cn-warn-bg);
+  color: var(--cn-warn);
+}
+
+/* 骨架条：客户端没有 shimmer，用一层静态的 ControlAltFill 占位。 */
+body:has(.console-shell) .shimmer {
+  border-radius: var(--cn-radius-control);
+  background-color: var(--cn-control-alt-fill);
+}
+body:has(.console-shell) .shimmer::after {
+  display: none;
+}
+
+/* 圆角工具类的剩余两档：`.rounded-full` 在客户端里只用于头像与开关，
+   徽章/计数都改成 10px 上下的圆角——这里不回退 `rounded-full`（头像要用）。 */
+body:has(.console-shell) .console-badge.rounded-full {
+  border-radius: 10px;
+}

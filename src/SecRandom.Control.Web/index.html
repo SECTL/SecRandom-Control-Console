@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+
+    <title>SecRandom 集控</title>
+    <meta name="description" content="SecRandom 集控 —— 管理教室内所有 SecRandom 客户端" />
+
+    
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    
+    <link
+      rel="preload"
+      href="/fonts/MiSans-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
+    
+    <meta name="theme-color" content="#4484bc" />
+
+    
+    <script>
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('srctrl:theme')
+          var mode =
+            saved === 'light' || saved === 'dark'
+              ? saved
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+          document.documentElement.dataset.theme = mode
+        } catch (error) {
+          // 隐私模式下 localStorage 可能直接抛异常：仍然给出确定的主题，不留白。
+          document.documentElement.dataset.theme = 'light'
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

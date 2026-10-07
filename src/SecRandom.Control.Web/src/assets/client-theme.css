@@ -1,0 +1,1763 @@
+/* =====================================================================
+ * 控制台「客户端外观」主题：SecRandom 桌面端（Avalonia + FluentAvalonia）的
+ * 设置页 / 名单页视觉，逐值从已评审通过的复刻稿
+ * `artifacts/client-style-preview/index.html` 的 <style> 段搬过来。
+ *
+ * 三条约定（与那套旧套件 `components/client/client-look.css` 无关，互不引用）：
+ *  1. **全部选择器都在 `.client-ui` 之下**：这些规则与 Tailwind / 控制台主题
+ *     （`--color-*`）并存，不能靠"加载顺序"来决定谁赢。需要用到这套皮的地方
+ *     自己带上 `class="client-ui"`（各组件根节点都带了，嵌套也无害）。
+ *  2. **令牌一律 `--cn-` 前缀**：复刻稿是独立页面，可以在 `:root` 上直接叫
+ *     `--card-bg`；这里是往一个已有主题（`main.css` 里也定义了 `html[data-theme]`
+ *     的变量）的站点里塞第二套皮，同名变量会互相覆盖。**取值逐字照抄，只改名**。
+ *  3. 单位全部用 px：复刻稿对照的是桌面端 1:1 的度量（36px 导航项、40px 行高…），
+ *     换成 rem 会随根字号漂移，反而不像客户端。
+ * ===================================================================== */
+
+/* ---------------------------------------------------------------------
+ * 1. 字体：客户端自带的那几个文件（`public/fonts/`，Vite 原样拷贝，
+ *    线上路径就是 `/fonts/...`）。
+ *
+ *    客户端引用它们的方式是
+ *      DefaultFontFamily    = "avares://SecRandom/Assets/Fonts/MiSans/#MiSans"
+ *      FluentIconsFontFamily= "avares://SecRandom/Assets/Fonts/#FluentSystemIcons-Resizable"
+ *    三个 MiSans 都是**静态字体**（没有 fvar 轴），所以只能一个文件一条
+ *    `@font-face`、靠 `font-weight` 把 400/500/600 合到同一个家族名上。
+ *
+ *    ── 2026-02 载荷整改（原来 4 个 TTF 共 25.83 MB，首屏要等三个 8 MB 的中文字体）──
+ *
+ *    · **图标字体已子集化**：`FluentSystemIcons-Resizable.ttf`（1,472,748 B，5332 个
+ *      字形）→ `.woff2` **4,688 B**，只留 `fluent-icons.ts` 与 `console-icons.ts`
+ *      两张表里映射到的 57 个码位。生成脚本 `scripts/subset-icon-font.py`，
+ *      核验脚本 `scripts/verify-icon-font.py`（逐字形量轮廓，防空框）。
+ *      **加了新图标名要重跑子集化**，否则那个字形在字体里不存在——
+ *      `fluent-icons.spec.ts` 只管名字，管不到字体，所以这一步是人工约定。
+ *    · **三个 MiSans 全量转 WOFF2**（8,122,324/8,103,840/8,034,980 B →
+ *      4,137,108/4,183,172/4,240,188 B，约 2 倍），没有做 CJK 子集化：
+ *      这套界面要显示**表格里导入的学生/家长姓名**，任何一个汉字都可能出现，
+ *      "按仓库里出现过的字"子集化必然漏字。全量 WOFF2 是**无损**的
+ *      （轮廓逐点一致，见 `scripts/verify-woff2-lossless.py`），
+ *      覆盖率仍是 29571 个码位，因此**最坏情况与整改前完全相同**：
+ *      不会出现豆腐块，也不会空白。总载荷 25,833,892 B → 12,565,156 B（-51.4%）。
+ *    · `font-display` 分档：**图标字体保持 `block`**（先画一个方框再换成图标
+ *      比晚一点画出来更难看，而每个字形都是界面的一部分）；**文字字体改成
+ *      `swap`**——先用系统的中文字体把字画出来，字体到了再换，首屏不再白屏。
+ *    · `MiSans-Medium` **保留**：重量 500 确实在用——Tailwind v4 的
+ *      `font-medium` 就是 `font-weight: 500`，console 外壳的组件与视图里用了
+ *      58 处（`NodeListPanel` / `GroupTransferPanel` / `GroupDetailView` …）。
+ *      这些 `@font-face` 是**全局**的（没有挂在 `.client-ui` 下），
+ *      而 `console-theme.css` 又把 `body:has(.console-shell)` 的 `--font-sans`
+ *      指向 'MiSans'，所以 500 命中 Medium 文件是常态，不是理论情况。
+ *
+ *    生产只发 `.woff2`，`.ttf` 已从 `public/fonts/` 删除（见本目录 README）。
+ * --------------------------------------------------------------------- */
+@font-face {
+  font-family: 'MiSans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/MiSans-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'MiSans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/MiSans-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'MiSans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/MiSans-Semibold.woff2') format('woff2');
+}
+/* 图标：子集化到 57 个码位（4.7 KB）。`block` 是刻意的——缺一个图标比晚一个难看。 */
+@font-face {
+  font-family: 'FluentSystemIcons';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/fonts/FluentSystemIcons-Resizable.woff2') format('woff2');
+}
+
+/* ---------------------------------------------------------------------
+ * 2. Fluent 2 视觉令牌。浅色 / 深色都挂在 `html[data-theme=...]` 上——
+ *    控制台的 `@/theme` 就是这么切主题的（只写这一个属性），组件里没有任何
+ *    `if (theme === …)` 分支。
+ *
+ *    强调色 #0078D4 来自客户端 `SecRandom.Core/GlobalConstants.cs` 的
+ *    `DefaultThemeColor`，客户端在 `App.axaml.cs` 里把它设成
+ *    `FluentAvaloniaTheme.CustomAccentColor`。
+ * --------------------------------------------------------------------- */
+:root {
+  /* 圆角（Fluent 2：控件/浮出层 4px，对话框 8px） */
+  --cn-radius-control: 4px;
+  --cn-radius-overlay: 4px;
+  --cn-radius-dialog: 8px;
+  /* 页面容器：客户端 StylesBase.axaml — MaxWidth 960 / Margin 12 12 18 12 / Spacing 4 */
+  --cn-page-max-width: 960px;
+  /* 字号级差：客户端 StylesBase.axaml 的 FontSizeS..3Xl */
+  --cn-fs-s: 12.8px;
+  --cn-fs-m: 14px;
+  --cn-fs-l: 16px;
+  --cn-fs-xl: 18px;
+  --cn-fs-2xl: 20px;
+  --cn-fs-3xl: 24px;
+  --cn-accent: #0078d4;
+}
+
+/* ---------- 浅色（控制台默认跟随系统，最终都会落到这两个值之一） ---------- */
+html[data-theme='light'] {
+  --cn-window: #f3f3f3;
+  --cn-window-mica: linear-gradient(160deg, #f6f6f6 0%, #f0f0f0 45%, #e9e9e9 100%);
+  --cn-nav-pane: #f3f3f3;
+  --cn-content-bg: #f9f9f9;
+  --cn-card-bg: rgba(255, 255, 255, 0.7);
+  --cn-card-bg-solid: #ffffff;
+  --cn-card-border: rgba(0, 0, 0, 0.0578);
+  --cn-card-shadow: none;
+  /* Fluent 2 卡片是「上浅下深」的 1px 描边（底部用更深的 ControlStrokeColor 收边） */
+  --cn-card-edge: rgba(0, 0, 0, 0.0578);
+  --cn-card-edge-bottom: rgba(0, 0, 0, 0.1622);
+  --cn-card-edge-top: rgba(0, 0, 0, 0.0578);
+  --cn-text: #1b1b1b;
+  --cn-text-secondary: rgba(0, 0, 0, 0.6063);
+  --cn-text-disabled: rgba(0, 0, 0, 0.3614);
+  --cn-divider: rgba(0, 0, 0, 0.0803);
+  --cn-control-fill: rgba(255, 255, 255, 0.7);
+  --cn-control-fill-hover: rgba(249, 249, 249, 0.5);
+  --cn-control-fill-pressed: rgba(249, 249, 249, 0.3);
+  --cn-control-border: rgba(0, 0, 0, 0.0578);
+  --cn-control-border-bottom: rgba(0, 0, 0, 0.1622);
+  --cn-control-alt-fill: rgba(0, 0, 0, 0.0241);
+  --cn-subtle-hover: rgba(0, 0, 0, 0.0373);
+  --cn-subtle-pressed: rgba(0, 0, 0, 0.0241);
+  --cn-nav-item-hover: rgba(0, 0, 0, 0.0373);
+  --cn-nav-item-pressed: rgba(0, 0, 0, 0.0241);
+  --cn-grid-header-bg: rgba(255, 255, 255, 0.7);
+  --cn-grid-row-hover: rgba(0, 0, 0, 0.0373);
+  --cn-grid-line: rgba(0, 0, 0, 0.0803);
+  --cn-toggle-off-fill: rgba(0, 0, 0, 0.4458);
+  --cn-toggle-off-border: rgba(0, 0, 0, 0.4458);
+  --cn-toggle-off-knob: #f9f9f9;
+  --cn-toggle-on-knob: #ffffff;
+  --cn-toggle-off-fill-hover: rgba(0, 0, 0, 0.3614);
+  --cn-accent-hover: #106ebe;
+  --cn-accent-pressed: #005a9e;
+  --cn-search-bg: rgba(255, 255, 255, 0.7);
+  --cn-danger: #c42b1c;
+  --cn-scroll-thumb: rgba(0, 0, 0, 0.4458);
+  --cn-crit-bg: rgba(196, 43, 28, 0.1);
+  /* 强调色上的文字：浅色下是白字（AccentButtonStyle） */
+  --cn-on-accent: #ffffff;
+  /* 提示条的三种语气底色。复刻稿里没有提示条，按同一套令牌推出来（见 .cn-note） */
+  --cn-warn: #9d5d00;
+  --cn-warn-bg: rgba(157, 93, 0, 0.1);
+  --cn-ok: #0f6cbd;
+  --cn-ok-bg: rgba(15, 108, 189, 0.1);
+  --cn-info-bg: rgba(0, 0, 0, 0.0241);
+}
+
+/* ---------- 深色 ---------- */
+html[data-theme='dark'] {
+  --cn-window: #202020;
+  --cn-window-mica: linear-gradient(160deg, #2b2b2b 0%, #242424 45%, #1c1c1c 100%);
+  --cn-nav-pane: #202020;
+  --cn-content-bg: #272727;
+  --cn-card-bg: rgba(255, 255, 255, 0.0512);
+  --cn-card-bg-solid: #2c2c2c;
+  --cn-card-border: rgba(0, 0, 0, 0.1);
+  --cn-card-edge: rgba(0, 0, 0, 0.1);
+  --cn-card-edge-bottom: rgba(0, 0, 0, 0.1);
+  --cn-card-edge-top: rgba(255, 255, 255, 0.0698);
+  --cn-text: #ffffff;
+  --cn-text-secondary: rgba(255, 255, 255, 0.786);
+  --cn-text-disabled: rgba(255, 255, 255, 0.3628);
+  --cn-divider: rgba(255, 255, 255, 0.0837);
+  --cn-control-fill: rgba(255, 255, 255, 0.0605);
+  --cn-control-fill-hover: rgba(255, 255, 255, 0.0837);
+  --cn-control-fill-pressed: rgba(255, 255, 255, 0.0326);
+  --cn-control-border: rgba(255, 255, 255, 0.0698);
+  --cn-control-border-bottom: rgba(255, 255, 255, 0.0698);
+  --cn-control-alt-fill: rgba(255, 255, 255, 0.0326);
+  --cn-subtle-hover: rgba(255, 255, 255, 0.0605);
+  --cn-subtle-pressed: rgba(255, 255, 255, 0.0419);
+  --cn-nav-item-hover: rgba(255, 255, 255, 0.0605);
+  --cn-nav-item-pressed: rgba(255, 255, 255, 0.0419);
+  --cn-grid-header-bg: rgba(255, 255, 255, 0.0512);
+  --cn-grid-row-hover: rgba(255, 255, 255, 0.0605);
+  --cn-grid-line: rgba(255, 255, 255, 0.0837);
+  --cn-toggle-off-fill: rgba(255, 255, 255, 0.5442);
+  --cn-toggle-off-border: rgba(255, 255, 255, 0.5442);
+  --cn-toggle-off-knob: #000000;
+  --cn-toggle-on-knob: #000000;
+  --cn-toggle-off-fill-hover: rgba(255, 255, 255, 0.6);
+  --cn-accent-hover: #2b88d8;
+  --cn-accent-pressed: #1e6fb8;
+  --cn-search-bg: rgba(255, 255, 255, 0.0605);
+  --cn-danger: #ff99a4;
+  --cn-scroll-thumb: rgba(255, 255, 255, 0.5442);
+  --cn-crit-bg: rgba(255, 153, 164, 0.1);
+  /* 深色下 Fluent 的强调色按钮用**深色**文字（白字在 #0078D4 上对比度不够） */
+  --cn-on-accent: #000000;
+  --cn-warn: #fce100;
+  --cn-warn-bg: rgba(252, 225, 0, 0.1);
+  --cn-ok: #6cb8f6;
+  --cn-ok-bg: rgba(108, 184, 246, 0.1);
+  --cn-info-bg: rgba(255, 255, 255, 0.0326);
+}
+
+/* ---------------------------------------------------------------------
+ * 3. 基座
+ * --------------------------------------------------------------------- */
+.client-ui {
+  /* 回落栈里**必须有中文字体**：原来这一串是
+     `'MiSans', system-ui, -apple-system, 'Segoe UI', sans-serif`，
+     其中 system-ui / Segoe UI 都**不含汉字**，字体没到（或加载失败）时
+     浏览器只能自己往下猜，中文会落到一个不可控的默认字体上。
+     现在显式列出三个平台的中文字体，`system-ui` 留在最后兜底。
+
+     最坏情况：字体被拦掉 / 加载失败时，界面用 Microsoft YaHei 画——
+     字形与 MiSans 不同（更宽、更传统），但**一定是可读的中文，不会是方框**。 */
+  font-family: 'MiSans', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', system-ui, sans-serif;
+  font-weight: 400;
+  font-size: var(--cn-fs-m);
+  line-height: 1.4;
+  color: var(--cn-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tailwind 的 preflight 已经清过一次边距，但这一套皮也可能被用在没有 preflight
+   的地方（例如单独渲染的组件），所以这里把用到的元素再清一遍，避免两套盒模型。 */
+.client-ui *,
+.client-ui *::before,
+.client-ui *::after {
+  box-sizing: border-box;
+}
+.client-ui h1,
+.client-ui h2,
+.client-ui h3,
+.client-ui p,
+.client-ui ul,
+.client-ui ol,
+.client-ui table,
+.client-ui figure {
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+.client-ui ul,
+.client-ui ol {
+  list-style: none;
+}
+.client-ui button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* 图标：字形由 HTML 里的码位给出（见 FluentIcon.vue），与客户端 FluentIcon 的
+   `Glyph` 是同一个编码。`flex:none` 让它永远不被压缩——图标被压扁比缺一个图标还难看。 */
+.client-ui .cn-fi {
+  /* 字体没到 / 加载失败时不要落到 Segoe UI —— 它没有私用区字形，
+     页面上会是一个个空位；直接挂到中文回落栈上，至少与正文同一套度量。 */
+  font-family: 'FluentSystemIcons', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', system-ui,
+    sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-block;
+  flex: none;
+  speak: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 视觉上藏起来但仍在无障碍树里（文件选择框那种"用外层 label 触发"的原生控件）。
+   自己写一份而不是用 Tailwind 的 `sr-only`：这套皮不该依赖宿主引了哪一份预检样式。 */
+.client-ui .cn-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 需要"客户端那一整块底板"的地方（窗口 / 内容区）挂这个类：
+   面板自己画的是内容区底色，窗口底板（Mica 渐变）由宿主的壳来决定。 */
+.client-ui.cn-surface {
+  background: var(--cn-content-bg);
+}
+.client-ui.cn-window {
+  background: var(--cn-window-mica);
+}
+
+/* 滚动条：与客户端一致（细、半透明、悬停变深）。 */
+.client-ui ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+.client-ui ::-webkit-scrollbar-thumb {
+  border: 4px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+  background-color: var(--cn-scroll-thumb);
+}
+.client-ui ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* =====================================================================
+ * 4. NavigationView（ClientPageNav.vue）
+ *    复刻稿 `.navpane / .nav-scroll / .nav-item / .nav-group`：272px 宽、
+ *    36px 行高、选中项 = 半透明 pill + 左侧 3px 强调条 + 600 字重标签。
+ * ===================================================================== */
+.client-ui .cn-nav {
+  width: 272px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 4px 0 8px;
+  /* 导航窗格与内容区**不是**同一个底色（客户端是 #F3F3F3 / #F9F9F9，深色 #202020 / #272727） */
+  background: var(--cn-nav-pane);
+}
+.client-ui .cn-nav__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 4px;
+}
+.client-ui .cn-nav__group {
+  margin: 14px 0 4px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cn-text-secondary);
+  letter-spacing: 0.02em;
+}
+.client-ui .cn-nav__group:first-child {
+  margin-top: 6px;
+}
+.client-ui .cn-nav__sep {
+  height: 1px;
+  background: var(--cn-divider);
+  margin: 10px 12px;
+}
+.client-ui .cn-nav__item {
+  height: 36px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  margin: 2px 0;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.client-ui .cn-nav__item:hover {
+  background: var(--cn-nav-item-hover);
+}
+.client-ui .cn-nav__item:active {
+  background: var(--cn-nav-item-pressed);
+}
+.client-ui .cn-nav__item:focus-visible {
+  outline: 2px solid var(--cn-text);
+  outline-offset: -2px;
+}
+.client-ui .cn-nav__indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: transparent;
+}
+.client-ui .cn-nav__item[aria-selected='true'] {
+  background: var(--cn-nav-item-hover);
+}
+.client-ui .cn-nav__item[aria-selected='true'] .cn-nav__indicator {
+  background: var(--cn-accent);
+}
+.client-ui .cn-nav__item[aria-selected='true'] .cn-nav__label {
+  font-weight: 600;
+}
+.client-ui .cn-nav__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =====================================================================
+ * 5. 页面骨架（设置 / 名单两个面板共用）
+ *    客户端 StylesBase.axaml：标题 28px/600，容器 MaxWidth 960、内边距
+ *    12/18/12/12、StackPanel.Spacing 4。
+ *
+ *    面板**自带内容区底色**（客户端的 `--content-bg`：浅色 #F9F9F9 / 深色 #272727）：
+ *    深色下文字是白的，宿主容器如果没画深色底，"白字白底"会让整块界面看不见。
+ *    宿主已经有同样的底色时留着它也无害（同一个值）。
+ * ===================================================================== */
+.client-ui .cn-panel {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 0;
+  background: var(--cn-content-bg);
+}
+/* 名单面板没有页面标题，但仍要有同一套容器度量（否则表格会拉到整屏宽） */
+.client-ui .cn-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--cn-content-bg);
+}
+.client-ui .cn-panel__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.client-ui .cn-page-title {
+  flex: none;
+  margin: 12px 18px 0 12px;
+  max-width: var(--cn-page-max-width);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+  color: var(--cn-text);
+}
+.client-ui .cn-page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.client-ui .cn-page {
+  margin: 12px 18px 12px 12px;
+  max-width: var(--cn-page-max-width);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 32px;
+}
+
+/* 段落标题：客户端 sr:IconText + Separator（图标 18px，文字 16px/600） */
+.client-ui .cn-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.client-ui .cn-section__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: var(--cn-fs-l);
+  font-weight: 600;
+  color: var(--cn-text);
+}
+.client-ui .cn-section__head .cn-fi {
+  font-size: 18px;
+}
+.client-ui .cn-section__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.client-ui .cn-separator {
+  height: 1px;
+  border: 0;
+  background: var(--cn-divider);
+  margin: 12px 0 4px;
+}
+
+/* =====================================================================
+ * 6. FASettingsExpander（ClientSettingCard.vue / ClientNestedRow.vue）
+ *    4px 圆角卡片、>=64px 高、16px 内边距、左侧 20px 图标、标题 14px、
+ *    描述 12px 次级色、右侧控件 12px 间距、chevron 32×32。
+ * ===================================================================== */
+.client-ui .cn-expander {
+  background: var(--cn-card-bg);
+  border: 1px solid var(--cn-card-edge);
+  border-top-color: var(--cn-card-edge-top);
+  border-bottom-color: var(--cn-card-edge-bottom);
+  border-radius: var(--cn-radius-control);
+  overflow: hidden;
+}
+.client-ui .cn-expander--disabled {
+  opacity: 0.55;
+}
+.client-ui .cn-expander--disabled .cn-expander__title {
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-expander__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  min-height: 64px;
+}
+.client-ui .cn-expander__icon {
+  font-size: 20px;
+  color: var(--cn-text);
+  flex: none;
+}
+.client-ui .cn-expander__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.client-ui .cn-expander__title {
+  font-size: var(--cn-fs-m);
+  font-weight: 400;
+  color: var(--cn-text);
+}
+.client-ui .cn-expander__desc {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--cn-text-secondary);
+  white-space: normal;
+}
+.client-ui .cn-expander__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.client-ui .cn-expander__chevron {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  color: var(--cn-text);
+  cursor: pointer;
+}
+.client-ui .cn-expander__chevron:hover {
+  background: var(--cn-subtle-hover);
+}
+.client-ui .cn-expander__chevron .cn-fi {
+  font-size: 12px;
+  transition: transform 0.15s ease;
+}
+.client-ui .cn-expander--collapsed .cn-expander__chevron .cn-fi {
+  transform: rotate(-90deg);
+}
+.client-ui .cn-expander--collapsed .cn-expander__items {
+  display: none;
+}
+/* 嵌套项：位于卡片内，左缩进与标题文字对齐（16 + 20 + 16 = 52） */
+.client-ui .cn-expander__items {
+  padding: 0 16px 8px 52px;
+}
+.client-ui .cn-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  min-height: 56px;
+}
+.client-ui .cn-row + .cn-row {
+  border-top: 1px solid var(--cn-divider);
+}
+.client-ui .cn-row__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.client-ui .cn-row__title {
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+}
+.client-ui .cn-row__desc {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-row__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.client-ui .cn-row--disabled {
+  opacity: 0.55;
+}
+
+/* 只读 chip / 「未读取」标记 / 改动点 */
+.client-ui .cn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--cn-control-alt-fill);
+  border: 1px solid var(--cn-control-border);
+  border-radius: var(--cn-radius-control);
+  color: var(--cn-text-secondary);
+  font-size: var(--cn-fs-m);
+  max-width: 320px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.client-ui .cn-chip .cn-fi {
+  font-size: 14px;
+}
+.client-ui .cn-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--cn-control-alt-fill);
+  border: 1px solid var(--cn-control-border);
+  color: var(--cn-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.client-ui .cn-dirty {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cn-accent);
+  flex: none;
+}
+
+/* =====================================================================
+ * 7. 控件：ToggleSwitch / ComboBox / NumberBox / TextBox / Button
+ * ===================================================================== */
+
+/* ---- ToggleSwitch：40×20 胶囊，开启时整条轨道变成强调色 ---- */
+.client-ui .cn-toggle {
+  --cn-tw: 40px;
+  --cn-th: 20px;
+  --cn-knob: 12px;
+  position: relative;
+  display: inline-block;
+  width: var(--cn-tw);
+  height: var(--cn-th);
+  flex: none;
+  cursor: pointer;
+}
+.client-ui .cn-toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.client-ui .cn-toggle__track {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--cn-th) / 2);
+  background: var(--cn-control-alt-fill);
+  border: 1px solid var(--cn-toggle-off-border);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.client-ui .cn-toggle__knob {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: var(--cn-knob);
+  height: var(--cn-knob);
+  margin-top: calc(var(--cn-knob) / -2);
+  border-radius: 50%;
+  background: var(--cn-toggle-off-knob);
+  transition:
+    left 0.12s cubic-bezier(0.2, 0, 0, 1),
+    width 0.12s,
+    height 0.12s;
+}
+.client-ui .cn-toggle input:checked + .cn-toggle__track {
+  background: var(--cn-accent);
+  border-color: var(--cn-accent);
+}
+.client-ui .cn-toggle input:checked ~ .cn-toggle__knob {
+  left: calc(var(--cn-tw) - var(--cn-knob) - 3px);
+  background: var(--cn-toggle-on-knob);
+}
+.client-ui .cn-toggle:hover input:not(:checked) + .cn-toggle__track {
+  background: var(--cn-toggle-off-fill-hover);
+}
+.client-ui .cn-toggle:hover input:checked + .cn-toggle__track {
+  background: var(--cn-accent-hover);
+  border-color: var(--cn-accent-hover);
+}
+.client-ui .cn-toggle input:focus-visible + .cn-toggle__track {
+  outline: 2px solid var(--cn-text);
+  outline-offset: 2px;
+}
+.client-ui .cn-toggle input:disabled {
+  cursor: not-allowed;
+}
+.client-ui .cn-toggle--disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.client-ui .cn-toggle--disabled input {
+  cursor: not-allowed;
+}
+
+/* ---- ComboBox：触发器 + 自绘弹层（ClientSelect.vue） ----
+   外观与度量与之前那份原生 <select> 逐字一致（32px 高、三档最小宽度、同一圈描边），
+   换掉的只是"弹出层由谁画"：现在由 .cn-combo-popup 画，它挂在 body 下。 */
+.client-ui .cn-combo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 128px;
+}
+.client-ui .cn-combo__trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 32px 0 12px;
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+  text-align: left;
+  background: var(--cn-control-fill);
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  border-radius: var(--cn-radius-control);
+  cursor: pointer;
+  outline: 0;
+}
+.client-ui .cn-combo__trigger:hover:not(:disabled) {
+  background: var(--cn-control-fill-hover);
+}
+.client-ui .cn-combo__trigger:focus-visible {
+  border-color: var(--cn-text);
+  border-bottom-width: 2px;
+}
+.client-ui .cn-combo__trigger:disabled {
+  cursor: not-allowed;
+  color: var(--cn-text-disabled);
+}
+.client-ui .cn-combo__trigger:disabled .cn-combo__chev {
+  color: var(--cn-text-disabled);
+}
+/* 选中项的文案：过长时省略号，触发器高度不跟着变 */
+.client-ui .cn-combo__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.client-ui .cn-combo__value--empty {
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-combo__chev {
+  position: absolute;
+  right: 9px;
+  pointer-events: none;
+  font-size: 12px;
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-combo--medium {
+  min-width: 180px;
+}
+.client-ui .cn-combo--wide {
+  min-width: 220px;
+}
+
+/* ComboBox 的弹出层。
+   ⚠️ 它被 Teleport 到 `body` 下，**不在** `.client-ui` 子树里（`.client-ui` 是面板自己的
+   根元素，`body` 上并没有这个类）。所以：
+     - 元素自己带着 `class="client-ui"`，`--cn-*` 令牌挂在 `html[data-theme]` 上、照常继承；
+     - **选择器不能写成 `.client-ui .cn-combo-popup`**——那是"祖先里有 .client-ui"，
+       而它的祖先只有 `body`。这一段里的每条规则都以 `.cn-combo-popup` 开头，
+       因此不管它被 Teleport 到哪里都命中。
+   `position: fixed` + 行内 left/top 由 ClientSelect 从触发器现算：这样任何祖先的
+   `overflow` 都裁不到它。层级高过应用里其他浮层（名单菜单 30、导入抽屉 40）。
+
+   `position` / `z-index` 带 `!important`：这一层浮在其他所有东西之上是**它的定义**，
+   不是一条可以被后来者顶掉的样式偏好；宿主页面里任何一条 `*` 通用重置都不能把它
+   按回文档流里（那正是"弹层被裁掉"这一类故障的成因）。 */
+.cn-combo-popup {
+  position: fixed !important;
+  z-index: 100000 !important;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--cn-card-bg-solid);
+  border: 1px solid var(--cn-card-edge);
+  border-radius: var(--cn-radius-overlay);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+.cn-combo-popup__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  color: var(--cn-text);
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  text-align: left;
+  cursor: pointer;
+}
+.cn-combo-popup__item[data-active='true'] {
+  background: var(--cn-subtle-hover);
+}
+.cn-combo-popup__item[aria-selected='true'] {
+  background: var(--cn-nav-item-hover);
+  font-weight: 600;
+}
+.cn-combo-popup__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cn-combo-popup__check {
+  font-size: 12px;
+  color: var(--cn-accent);
+}
+
+/* ---- NumberBox：StylesBase.axaml 的 `.settings NumericUpDown { MinWidth 128 }` ---- */
+.client-ui .cn-number {
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  min-width: 128px;
+  background: var(--cn-control-fill);
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  border-radius: var(--cn-radius-control);
+  overflow: hidden;
+}
+.client-ui .cn-number--disabled {
+  opacity: 0.55;
+}
+.client-ui .cn-number input {
+  width: 100%;
+  min-width: 64px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+  text-align: center;
+  padding: 0 4px;
+  -moz-appearance: textfield;
+}
+.client-ui .cn-number input::-webkit-outer-spin-button,
+.client-ui .cn-number input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.client-ui .cn-number__spin {
+  width: 32px;
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--cn-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.client-ui .cn-number__spin:hover:not(:disabled) {
+  background: var(--cn-subtle-hover);
+}
+.client-ui .cn-number__spin:disabled {
+  cursor: not-allowed;
+  color: var(--cn-text-disabled);
+}
+.client-ui .cn-number__spin .cn-fi {
+  font-size: 12px;
+}
+
+/* ---- TextBox ---- */
+.client-ui .cn-textbox {
+  height: 32px;
+  min-width: 128px;
+  background: var(--cn-control-fill);
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  border-radius: var(--cn-radius-control);
+  padding: 0 11px;
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+  outline: 0;
+}
+.client-ui .cn-textbox:hover:not(:disabled) {
+  background: var(--cn-control-fill-hover);
+}
+.client-ui .cn-textbox:focus-visible {
+  border-color: var(--cn-text);
+  border-bottom-width: 2px;
+}
+.client-ui .cn-textbox::placeholder {
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-textbox:disabled {
+  cursor: not-allowed;
+  color: var(--cn-text-disabled);
+}
+
+/* ---- HotkeyBox：只读文本框 + 一个小清空按钮（客户端 `S_Shortcut_*` 那一行）
+   度量与 TextBox 逐字一致（32px 高、min-width 128、同一圈描边）——客户端那个框
+   本来就是一个只读 TextBox，换成录制器不该让它看起来是另一种控件。
+   录制态用强调色描边（框里换成「按下组合键…」），这是唯一一处与 TextBox 不同的画法，
+   它要说的是"现在我在听你按键"，不只是一个被聚焦的输入框。 ---- */
+.client-ui .cn-hotkey {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 128px;
+}
+.client-ui .cn-hotkey__box {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 128px;
+  height: 32px;
+  padding: 0 11px;
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+  text-align: left;
+  background: var(--cn-control-fill);
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  border-radius: var(--cn-radius-control);
+  cursor: pointer;
+  outline: 0;
+}
+.client-ui .cn-hotkey__box:hover:not(:disabled) {
+  background: var(--cn-control-fill-hover);
+}
+.client-ui .cn-hotkey__box:focus-visible {
+  border-color: var(--cn-text);
+  border-bottom-width: 2px;
+}
+.client-ui .cn-hotkey__box:disabled {
+  cursor: not-allowed;
+  color: var(--cn-text-disabled);
+}
+/* 录制中：整圈强调色。`:focus` 与 `:disabled` 之后写，保证录制态盖得住聚焦态。 */
+.client-ui .cn-hotkey__box--recording,
+.client-ui .cn-hotkey__box--recording:focus-visible {
+  border-color: var(--cn-accent);
+  border-bottom-color: var(--cn-accent);
+}
+.client-ui .cn-hotkey__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* 空绑定 / 未读取时的占位：与 TextBox 的 placeholder 同一个颜色 */
+.client-ui .cn-hotkey__value--empty {
+  color: var(--cn-text-secondary);
+}
+/* 清空按钮：客户端那个是 TransparentButtonStyle（没有底板，悬停才浮出来一层），
+   所以它不套 `.cn-btn`——那一条自带描边与底色。 */
+.client-ui .cn-hotkey__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: var(--cn-fs-l);
+  line-height: 1;
+  color: var(--cn-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  cursor: pointer;
+}
+.client-ui .cn-hotkey__clear:hover:not(:disabled) {
+  background: var(--cn-subtle-hover);
+  color: var(--cn-text);
+}
+.client-ui .cn-hotkey__clear:focus-visible {
+  outline: 2px solid var(--cn-text);
+  outline-offset: -2px;
+}
+.client-ui .cn-hotkey__clear:disabled {
+  cursor: not-allowed;
+  color: var(--cn-text-disabled);
+}
+
+/* ---- 按钮。复刻稿里的 `.btn` 是默认样式；`--accent` 是 Fluent 的
+        AccentButtonStyle（复刻稿没有动作按钮，故按强调色令牌补出来）。 ---- */
+.client-ui .cn-btn {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+  background: var(--cn-control-fill);
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  border-radius: var(--cn-radius-control);
+  cursor: pointer;
+}
+.client-ui .cn-btn:hover:not(:disabled) {
+  background: var(--cn-control-fill-hover);
+}
+.client-ui .cn-btn:active:not(:disabled) {
+  background: var(--cn-control-fill-pressed);
+}
+.client-ui .cn-btn:disabled {
+  cursor: not-allowed;
+  color: var(--cn-text-disabled);
+}
+.client-ui .cn-btn .cn-fi {
+  font-size: 16px;
+}
+.client-ui .cn-btn--accent {
+  background: var(--cn-accent);
+  border-color: var(--cn-accent);
+  color: var(--cn-on-accent);
+}
+.client-ui .cn-btn--accent:hover:not(:disabled) {
+  background: var(--cn-accent-hover);
+  border-color: var(--cn-accent-hover);
+}
+.client-ui .cn-btn--accent:active:not(:disabled) {
+  background: var(--cn-accent-pressed);
+  border-color: var(--cn-accent-pressed);
+}
+.client-ui .cn-btn--accent:disabled {
+  background: var(--cn-control-alt-fill);
+  border-color: var(--cn-control-border);
+  color: var(--cn-text-disabled);
+}
+.client-ui .cn-btn--icon {
+  width: 32px;
+  padding: 0;
+}
+
+/* 设置页 / 名单页顶部那一排动作（读取、下发、待下发计数） */
+.client-ui .cn-actionbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+.client-ui .cn-actionbar__count {
+  font-size: 12px;
+  color: var(--cn-text-secondary);
+}
+
+/* =====================================================================
+ * 8. FACommandBar（ClientCommandBar.vue）+ 名单页的分段开关
+ *    最小高度 48px、命令按钮 40px、组间 1px×24px 竖线。
+ * ===================================================================== */
+.client-ui .cn-cmdbar-card {
+  background: var(--cn-card-bg);
+  border: 1px solid var(--cn-card-edge);
+  border-top-color: var(--cn-card-edge-top);
+  border-bottom-color: var(--cn-card-edge-bottom);
+  border-radius: var(--cn-radius-control);
+  /* ⚠️ 这里**不能**写 `overflow: hidden`（曾经是 hidden，那是一个真实故障）：
+     命令栏左上角的「当前名单」是一个 `position: absolute` 的下拉菜单，它就在这张卡片里面。
+     卡片一裁，菜单只剩贴着下沿的一条边，其余部分落进下面的名单表格、被表格整片盖住——
+     看得见一点、点不到任何一项，也就是"控件坏了"。
+     卡片是 4px 圆角 + 1px 描边，而 `.cn-cmdbar` 有 4px 内边距，
+     子元素自己的圆角本来就在圆角之内——不裁不会露出直角。
+     核验方式：`?panel=roster&openLists=1` 那一张截图（见 scripts/preview-shots.mjs）。 */
+  overflow: visible;
+}
+.client-ui .cn-cmdbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  min-height: 48px;
+  flex-wrap: wrap;
+}
+.client-ui .cn-cmdbar__leading {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+/* 当前名单按钮 + 它的下拉菜单：菜单要相对这个锚点定位 */
+.client-ui .cn-listmenu-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.client-ui .cn-cmdbar__tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-cmd {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  color: var(--cn-text);
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.client-ui .cn-cmd:hover:not(:disabled) {
+  background: var(--cn-subtle-hover);
+}
+.client-ui .cn-cmd:active:not(:disabled) {
+  background: var(--cn-subtle-pressed);
+}
+.client-ui .cn-cmd:disabled {
+  cursor: not-allowed;
+  color: var(--cn-text-disabled);
+}
+.client-ui .cn-cmd .cn-fi {
+  font-size: 16px;
+}
+.client-ui .cn-cmd__caret {
+  font-size: 10px;
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-cmdbar__sep {
+  width: 1px;
+  height: 24px;
+  flex: none;
+  margin: 0 6px;
+  background: var(--cn-divider);
+}
+
+/* 「当前名单」按钮弹出的列表菜单（客户端是 Flyout）。
+   它必须是**带 z-index 的定位元素**才压得住下面的名单表格（表格是普通流内容）：
+   只写 `position: absolute` 而把层级交给祖先去管，就会出现"菜单被表格盖住"。
+   层级顺序：菜单 30 < 导入抽屉 40 < 「添加一行」对话框 60 < ComboBox 弹层 100000——
+   后三者打开时本来就该盖住它，所以这里**不是**越大越好。 */
+.client-ui .cn-listmenu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 30;
+  min-width: 200px;
+  /* 宽度跟着内容走：绝对定位元素默认的 shrink-to-fit 会把宽度**夹在触发按钮的宽度**上，
+     于是"高二（3）班 + 6 人 + 当前使用"挤不进 200px，名单名折成三行、
+     溢出到下面那一项上去（行高固定 32px，装不下折行）。上限之外交给省略号。 */
+  width: max-content;
+  max-width: min(420px, calc(100vw - 32px));
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--cn-card-bg-solid);
+  border: 1px solid var(--cn-card-edge);
+  border-radius: var(--cn-radius-overlay);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+.client-ui .cn-listmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  color: var(--cn-text);
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  text-align: left;
+  cursor: pointer;
+}
+.client-ui .cn-listmenu__item:hover {
+  background: var(--cn-subtle-hover);
+}
+/* 名单名在一行里显示，放不下就走省略号。
+   `.cn-nav__label` 自己只有 `overflow:hidden` + `text-overflow:ellipsis`、**没有** `white-space:nowrap`，
+   在菜单这一行（高 32px、名字旁边还挂着两枚小徽标）里它会折行并溢出到相邻项上。 */
+.client-ui .cn-listmenu__item .cn-nav__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.client-ui .cn-listmenu__item[aria-checked='true'] {
+  background: var(--cn-nav-item-hover);
+  font-weight: 600;
+}
+
+/* 分段开关（点名 / 抽奖） */
+.client-ui .cn-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+}
+.client-ui .cn-segment__item {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  color: var(--cn-text-secondary);
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.client-ui .cn-segment__item:hover {
+  background: var(--cn-subtle-hover);
+}
+.client-ui .cn-segment__item[aria-selected='true'] {
+  background: var(--cn-accent);
+  color: var(--cn-on-accent);
+}
+
+/* =====================================================================
+ * 9. DataGrid（ClientRosterPanel.vue）
+ *    客户端 GridLinesVisibility=Horizontal：表头 32px、行 40px、
+ *    横向分隔线、悬停/选中同一层填充、选中行首格 3px 强调条。
+ * ===================================================================== */
+/* 名单面板：命令栏一行，下面是表格正文（正文与设置页同一套容器度量） */
+.client-ui .cn-roster__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.client-ui .cn-grid-card {
+  background: var(--cn-card-bg);
+  border: 1px solid var(--cn-card-edge);
+  border-top-color: var(--cn-card-edge-top);
+  border-bottom-color: var(--cn-card-edge-bottom);
+  border-radius: 4px 4px 0 0;
+  overflow-x: auto;
+}
+.client-ui table.cn-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--cn-fs-m);
+}
+.client-ui table.cn-grid th {
+  height: 32px;
+  text-align: left;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--cn-text-secondary);
+  background: var(--cn-grid-header-bg);
+  border-bottom: 1px solid var(--cn-grid-line);
+  padding: 0 8px;
+  white-space: nowrap;
+  user-select: none;
+}
+.client-ui table.cn-grid th .cn-grid__th {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.client-ui table.cn-grid th .cn-grid__sort {
+  font-size: 10px;
+  opacity: 0.45;
+}
+.client-ui table.cn-grid td {
+  height: 40px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--cn-grid-line);
+  color: var(--cn-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.client-ui table.cn-grid tbody tr:hover td {
+  background: var(--cn-grid-row-hover);
+}
+.client-ui table.cn-grid tbody tr.is-selected td {
+  background: var(--cn-grid-row-hover);
+}
+/* 选中条的 3px 强调色只画在行首单元格上：逐格画会出现分段竖条 */
+.client-ui table.cn-grid tbody tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--cn-accent);
+}
+.client-ui table.cn-grid tbody tr:last-child td {
+  border-bottom: 0;
+}
+.client-ui table.cn-grid td.cn-grid__center,
+.client-ui table.cn-grid th.cn-grid__center {
+  text-align: center;
+}
+.client-ui table.cn-grid th.cn-grid__center .cn-grid__th {
+  justify-content: center;
+}
+.client-ui table.cn-grid td.cn-grid__actions {
+  padding: 0;
+}
+.client-ui .cn-grid__cellactions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 40px;
+}
+.client-ui .cn-grid__empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--cn-text-secondary);
+  font-size: var(--cn-fs-m);
+  background: var(--cn-card-bg);
+}
+
+/* 单元格里的"就地编辑"输入：平时像文本，悬停/聚焦才显出输入框 */
+.client-ui .cn-cell-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--cn-fs-m);
+  color: var(--cn-text);
+  outline: 0;
+}
+.client-ui .cn-cell-input:hover:not(:disabled) {
+  background: var(--cn-control-fill-hover);
+  border-color: var(--cn-control-border);
+}
+.client-ui .cn-cell-input:focus {
+  background: var(--cn-control-fill);
+  border-color: var(--cn-accent);
+  border-bottom-width: 2px;
+}
+.client-ui .cn-cell-input::placeholder {
+  color: var(--cn-text-disabled);
+}
+.client-ui .cn-cell-input--number {
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.client-ui .cn-cell-input--number::-webkit-outer-spin-button,
+.client-ui .cn-cell-input--number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* DataGridCheckBoxColumn：20×20、4px 圆角、选中填强调色 */
+.client-ui .cn-check {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+.client-ui .cn-check input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.client-ui .cn-check__box {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--cn-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  background: transparent;
+}
+.client-ui .cn-check__box .cn-fi {
+  font-size: 12px;
+}
+.client-ui .cn-check input:checked + .cn-check__box {
+  background: var(--cn-accent);
+  border-color: var(--cn-accent);
+  color: var(--cn-on-accent);
+}
+.client-ui .cn-check input:focus-visible + .cn-check__box {
+  outline: 2px solid var(--cn-text);
+  outline-offset: 2px;
+}
+
+/* 组内「统一配置」页：设置行右侧的「下发」勾选 + 控件 */
+.client-ui .cn-batch-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.client-ui .cn-batch-cell__include {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--cn-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 组内「统一配置」页：下发前的逐项核对清单（设置项散在十一页里，光看条数想不起来是哪几项） */
+.client-ui .cn-batch-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.client-ui .cn-batch-summary__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-batch-summary__title {
+  color: var(--cn-text);
+}
+.client-ui .cn-batch-summary__path {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.client-ui .cn-batch-summary__value {
+  color: var(--cn-accent);
+  font-weight: 600;
+}
+
+/* 表格里的小图标按钮 */
+.client-ui .cn-icon-btn {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cn-radius-control);
+  background: transparent;
+  color: var(--cn-text);
+  cursor: pointer;
+}
+.client-ui .cn-icon-btn:hover:not(:disabled) {
+  background: var(--cn-subtle-hover);
+}
+.client-ui .cn-icon-btn:disabled {
+  cursor: not-allowed;
+  color: var(--cn-text-disabled);
+}
+.client-ui .cn-icon-btn--danger {
+  color: var(--cn-danger);
+}
+.client-ui .cn-icon-btn .cn-fi {
+  font-size: 16px;
+}
+
+/* 标签 chip（复刻稿的 `.tag`） */
+.client-ui .cn-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-right: 4px;
+  border-radius: 3px;
+  background: var(--cn-control-alt-fill);
+  border: 1px solid var(--cn-control-border);
+  font-size: 12px;
+  color: var(--cn-text-secondary);
+}
+
+/* =====================================================================
+ * 10. 提示条（notices）。复刻稿是一份静态页面，没有提示条；
+ *     这里按同一套令牌给四种语气：信息 / 警告 / 成功 / 失败。
+ * ===================================================================== */
+.client-ui .cn-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.client-ui .cn-note {
+  border: 1px solid var(--cn-control-border);
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-control-alt-fill);
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-note--info {
+  background: var(--cn-info-bg);
+}
+.client-ui .cn-note--warn {
+  border-color: var(--cn-warn);
+  background: var(--cn-warn-bg);
+  color: var(--cn-warn);
+}
+.client-ui .cn-note--ok {
+  border-color: var(--cn-ok);
+  background: var(--cn-ok-bg);
+  color: var(--cn-ok);
+}
+.client-ui .cn-note--fail {
+  border-color: var(--cn-danger);
+  background: var(--cn-crit-bg);
+  color: var(--cn-danger);
+}
+
+/* =====================================================================
+ * 11. 导入抽屉（ClientImportDrawer.vue）
+ *     结构与行为对着客户端右侧浮出层：遮罩、右侧面板、头部标题 + 关闭、
+ *     一行说明、可滚动正文、底部操作区。度量按 Fluent 2 的 4px 圆角与
+ *     卡片描边走。
+ * ===================================================================== */
+.client-ui .cn-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: flex-end;
+}
+.client-ui .cn-drawer__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+.client-ui .cn-drawer__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100%);
+  height: 100%;
+  background: var(--cn-card-bg-solid);
+  border-left: 1px solid var(--cn-card-edge);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.25);
+  animation: cn-drawer-in 0.18s cubic-bezier(0.1, 0.9, 0.2, 1) both;
+}
+@keyframes cn-drawer-in {
+  from {
+    transform: translateX(14%);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.client-ui .cn-drawer__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cn-divider);
+}
+/* 关闭按钮靠右：标题占满剩下的宽度，点击区域也就跟着在右边 */
+.client-ui .cn-drawer__head .cn-icon-btn {
+  margin-left: auto;
+}
+.client-ui .cn-drawer__title {
+  font-size: var(--cn-fs-m);
+  font-weight: 600;
+  color: var(--cn-text);
+}
+.client-ui .cn-drawer__hint {
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-drawer__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 16px 16px;
+}
+.client-ui .cn-drawer__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--cn-divider);
+  background: var(--cn-control-alt-fill);
+}
+
+/* 抽屉里的表单网格与"选文件"那一行 */
+.client-ui .cn-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 10px;
+}
+.client-ui .cn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.client-ui .cn-field__label {
+  font-size: 12px;
+  color: var(--cn-text-secondary);
+}
+.client-ui .cn-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--cn-control-border);
+  border-bottom-color: var(--cn-control-border-bottom);
+  border-radius: var(--cn-radius-control);
+  background: var(--cn-control-fill);
+  font-size: var(--cn-fs-m);
+  text-align: left;
+  color: var(--cn-text);
+  cursor: pointer;
+}
+.client-ui .cn-list-item:hover {
+  background: var(--cn-control-fill-hover);
+}
+.client-ui .cn-list-item--active {
+  border-color: var(--cn-accent);
+  color: var(--cn-text);
+}
+
+/* 导入预览表：与 DataGrid 同一套度量，但不占满宽度 */
+.client-ui .cn-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--cn-card-edge);
+  border-radius: var(--cn-radius-control);
+}
+.client-ui table.cn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.client-ui table.cn-table th {
+  height: 28px;
+  padding: 0 8px;
+  text-align: left;
+  font-weight: 400;
+  color: var(--cn-text-secondary);
+  background: var(--cn-grid-header-bg);
+  border-bottom: 1px solid var(--cn-grid-line);
+  white-space: nowrap;
+}
+.client-ui table.cn-table td {
+  height: 28px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--cn-grid-line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+/* =====================================================================
+ * 12. FAContentDialog（ClientRosterPanel.vue 的「添加一行」）
+ *     客户端的 content dialog：整屏遮罩 + 居中卡片、8px 圆角、
+ *     标题 / 正文 / 底部两个按钮。层级在导入抽屉（40）之上、
+ *     ComboBox 弹层（100000）之下——对话框里的下拉仍然要能盖住它。
+ * ===================================================================== */
+.client-ui .cn-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.client-ui .cn-dialog__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+.client-ui .cn-dialog__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(420px, 100%);
+  max-height: 100%;
+  background: var(--cn-card-bg-solid);
+  border: 1px solid var(--cn-card-edge);
+  border-radius: var(--cn-radius-dialog);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+.client-ui .cn-dialog__title {
+  padding: 16px 20px 0;
+  font-size: var(--cn-fs-l);
+  font-weight: 600;
+  color: var(--cn-text);
+}
+.client-ui .cn-dialog__body {
+  padding: 12px 20px 16px;
+  overflow: auto;
+}
+.client-ui .cn-dialog__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+}

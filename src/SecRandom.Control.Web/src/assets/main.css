@@ -1,0 +1,897 @@
+@import 'tailwindcss';
+
+/* 桌面客户端那套视觉（Fluent 2 令牌 + 客户端组件样式）与控制台外壳的映射层。
+   两个都放在这里 import 是为了**保证源码顺序**：`.console-theme.css` 里那些
+   "把 `--color-*` 重新指向 `--cn-*`"的规则必须排在下面这段 `:root` /
+   `html[data-theme='light']` 之后才能赢（整个仓库没有一处 `!important`）。
+   详见两个文件顶部的说明。 */
+@import './client-theme.css';
+@import './console-theme.css';
+
+/* ---------------------------------------------------------------------------
+   设计令牌
+
+   主色取自 SecRandom 官网 secrandom.sectl.cn 的 CSS 变量（VuePress 主题覆盖）：
+     --vp-c-brand-1: #4484bc   ← 主色
+     --vp-c-brand-2: #327cbe   ← 悬停
+     --vp-c-brand-3: #137ad3   ← 强调 / 最亮
+   这是一个偏青、偏灰的蓝（"蓝也不蓝"），比饱和的纯蓝更耐看，
+   长时间盯着控制台不刺眼。
+--------------------------------------------------------------------------- */
+@theme {
+  --color-surface-bg: #0c0f14;
+  --color-surface: #131820;
+  --color-surface-2: #1a2029;
+  --color-surface-3: #212936;
+  --color-border-base: #232b38;
+  --color-border-strong: #2e3847;
+
+  --color-text-base: #e8edf4;
+  --color-text-muted: #8b98ab;
+  --color-text-faint: #6a7688;
+
+  /* 品牌蓝 —— 与官网一致 */
+  --color-brand: #4484bc;
+  --color-brand-hover: #327cbe;
+  --color-brand-bright: #137ad3;
+
+  --color-info: #4d9cf5;
+  --color-warn: #e0a83c;
+  --color-danger: #ef5f6b;
+  --color-ok: #30a46c;
+  --color-privileged: #a47cf0;
+
+  /* 装饰用柔光蓝：渐变文字的中段、图标悬停。深色底要偏亮，浅色底要偏暗。 */
+  --color-brand-soft: #8ec5f0;
+
+  --radius-card: 10px;
+  --radius-control: 6px;
+
+  --font-sans: 'Segoe UI', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, monospace;
+
+  /* 动效节奏令牌：整套界面只用这几档时长与曲线，避免每处各写一个手感 */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 420ms;
+}
+
+html {
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   浅色主题
+
+   做法只有一条：**在同一批令牌上覆盖取值**。
+
+   Tailwind v4 的 `@theme` 把令牌编译成 CSS 变量（`:root` / `@layer theme`），
+   而下面这段是**无层级样式**——按 CSS 的层叠规则，未分层的规则一律胜过
+   `@layer` 里的规则，因此这里的覆盖必然生效，不需要 `!important`，
+   也不需要为每个组件写第二套工具类。组件里因此看不到任何"判断当前主题"的分支。
+
+   ⚠️ 只改语义令牌，不改结构：
+   · 品牌蓝在浅底上要压暗一点，否则白字按钮与强调文字都过不了 AA；
+   · 状态色（危险/信息/警告）同样压暗——它们在深色底上是"亮一档的同色系"，
+     直接搬到白底上会变成读不清的浅粉 / 浅黄。
+--------------------------------------------------------------------------- */
+html[data-theme='light'] {
+  color-scheme: light;
+
+  --color-surface-bg: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef1f6;
+  --color-surface-3: #e2e8f0;
+  --color-border-base: #dce3ec;
+  --color-border-strong: #c3cedd;
+
+  --color-text-base: #16202c;
+  --color-text-muted: #53617a;
+  --color-text-faint: #78859a;
+
+  --color-brand: #3a76ad;
+  --color-brand-hover: #2f6899;
+  --color-brand-bright: #1568b4;
+  --color-brand-soft: #2f7fc4;
+
+  --color-info: #1c5c9c;
+  --color-warn: #8a5a10;
+  --color-danger: #b3262f;
+  --color-ok: #1f7a4d;
+  --color-privileged: #6b4bbf;
+
+  /* 白色叠加层在浅色底上是不可见的，必须整体换成深色叠加 */
+  --grid-dot: rgb(15 32 55 / 0.05);
+  --grid-dot-strong: rgb(15 32 55 / 0.07);
+  --shimmer-sheen: rgb(15 32 55 / 0.06);
+  --shadow-card: rgb(20 35 60 / 0.14);
+  --scrollbar-hover: #a9b6c7;
+}
+
+/*
+  叠加层与阴影的取值。
+
+  这些不是 Tailwind 的颜色工具类（不会生成 `bg-*` 工具），只是给上面的
+  `background-image` / `box-shadow` 用的普通变量，所以放在 `:root` 而不是 `@theme`。
+*/
+:root {
+  --grid-dot: rgb(255 255 255 / 0.022);
+  --grid-dot-strong: rgb(255 255 255 / 0.05);
+  --shimmer-sheen: rgb(255 255 255 / 0.075);
+  --shadow-card: rgb(0 0 0 / 0.55);
+  --scrollbar-hover: #3b4658;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface-bg);
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 0);
+  background-size: 22px 22px;
+  color: var(--color-text-base);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 更细的滚动条：默认那条亮灰色在深色界面里非常抢眼 */
+* {
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: var(--color-border-strong);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-hover);
+}
+
+.icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+/* 可见焦点环：键盘导航时必须看得见落在哪。鼠标点击不显示（:focus-visible）。 */
+:where(a, button, select, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-bright);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+
+/* ===========================================================================
+   动效系统
+
+   参考来源（仅借鉴做法，代码全部为本仓库自行实现，不引入新依赖）：
+
+   · Aceternity UI「Spotlight / Card Spotlight」
+     https://ui.aceternity.com/components/card-spotlight
+     → `.spotlight-card`：指针位置驱动的柔光，把"鼠标在哪"变成一条视觉线索。
+     ⚠️ Aceternity 的条款禁止转载/再分发其素材源码，因此这里只借"指针径向光斑"
+     这一通用做法（CSS 变量 + radial-gradient）自行实现，不逐字复制其组件代码。
+   · Aceternity UI「Grid and Dot Backgrounds」的遮罩淡出思路
+     → `.brand-glow` 的点阵 + 径向 mask。
+   · React Bits（MIT）「SpotlightCard / Click Spark / Animated Content / CountUp」
+     https://reactbits.dev
+     → `.spotlight-card`、`.press`、`.reveal`、`useCountUp`。
+   · Uiverse（MIT）「shine button / skeleton shimmer」
+     https://uiverse.io
+     → `.btn-primary` 的高光扫过（::after + translateX）、`.shimmer`。
+   · Anime.js v4（MIT）的 stagger / scroll-triggered 时间线
+     https://animejs.com/documentation
+     → 入场逐项延迟由 IntersectionObserver 触发（见 `@/motion/reveal`）。
+
+   三条自律规则（否则这类效果会立刻变俗）：
+   1. 只做位移、透明度、模糊、颜色；不做 3D 倾斜与霓虹描边。
+   2. 所有动效都在 `prefers-reduced-motion: reduce` 下整体关闭，且默认态可见
+      （先有内容，再有动画；动画失败不能导致页面空白）。
+   3. 时长按"可控、越快越好"取：入场 420ms，悬停 140ms。
+
+   **刻意不做的效果**（安全管控台要传达"稳定、可信、可审计"，动效抢视线会削弱信任）：
+   3D 倾斜卡、无限跑马灯文字、霓虹/电弧/移动边框、粒子与 WebGL 底纹、
+   glitch / 乱码文字（会被误读成入侵或故障）、大幅视差、磁吸按钮（密集面板里会误点）。
+=========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   0. 点阵底纹 + 径向淡出
+
+   body 上已有一层 22px 点阵；这里给首页英雄区再叠一层更疏的点阵，
+   用 mask 让它向边缘淡出——静态气质，几乎没有"动效感"，但比纯色底耐看。
+--------------------------------------------------------------------------- */
+.dot-grid-fade {
+  position: relative;
+}
+
+.dot-grid-fade::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(var(--grid-dot-strong) 1px, transparent 1px);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 50% 0%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 58% at 50% 0%, #000 30%, transparent 100%);
+}
+
+/* ---------------------------------------------------------------------------
+   1. 滚动入场：逐项淡入上浮
+
+   由 `@/motion/reveal` 插件统一观察（一棵树只挂一个 IntersectionObserver），
+   组件被观察到时追加 `data-revealed`，这里负责过渡。
+   默认态就是"可见"——只有脚本确认观察器可用时才先隐藏，
+   所以 JS 出错时页面不会留白。
+--------------------------------------------------------------------------- */
+.reveal {
+  opacity: 1;
+  transform: none;
+}
+
+[data-reveal-ready='true'] .reveal:not([data-revealed]) {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0);
+}
+
+[data-reveal-ready='true'] .reveal {
+  transition:
+    opacity var(--dur-slow) var(--ease-out-soft),
+    transform var(--dur-slow) var(--ease-out-soft);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+[data-reveal-ready='true'] .reveal[data-revealed] {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   2. 聚光卡片
+
+   结构（由 SpotlightCard.vue 渲染，两层都是 pointer-events:none 的装饰层）：
+     .spotlight-card           容器，overflow:hidden 裁掉柔光边角
+     .spotlight-card__glow     跟随指针的径向柔光，位置来自 --mx / --my
+     .spotlight-card__ring     悬停时浮现的一圈渐变描边（自左上到右下）
+
+   指针坐标由组件写入 CSS 变量，这里只消费——CSS 不参与事件计算。
+--------------------------------------------------------------------------- */
+.spotlight-card {
+  position: relative;
+  isolation: isolate;
+  transition:
+    border-color var(--dur-base) var(--ease-out-soft),
+    box-shadow var(--dur-base) var(--ease-out-soft),
+    transform var(--dur-base) var(--ease-out-soft);
+}
+
+.spotlight-card__glow,
+.spotlight-card__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.spotlight-card__glow {
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out-soft);
+  background: radial-gradient(
+    220px circle at var(--mx, 50%) var(--my, 0%),
+    rgb(68 132 188 / 0.16),
+    rgb(19 122 211 / 0.06) 42%,
+    transparent 72%
+  );
+}
+
+.spotlight-card__ring {
+  opacity: 0;
+  padding: 1px;
+  transition: opacity var(--dur-base) var(--ease-out-soft);
+  background: linear-gradient(
+    135deg,
+    rgb(19 122 211 / 0.75),
+    rgb(68 132 188 / 0.28) 38%,
+    transparent 62%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* 悬停与键盘聚焦给同一套反馈：只做 hover 会让键盘用户看不到任何提示 */
+.spotlight-card:hover {
+  border-color: transparent;
+  transform: translate3d(0, -2px, 0);
+  box-shadow:
+    0 10px 30px -12px var(--shadow-card),
+    0 0 0 1px rgb(68 132 188 / 0.18);
+}
+
+.spotlight-card:hover .spotlight-card__glow,
+.spotlight-card:focus-within .spotlight-card__ring,
+.spotlight-card:hover .spotlight-card__ring {
+  opacity: 1;
+}
+
+.spotlight-card:has(> :focus-visible) {
+  border-color: transparent;
+  box-shadow: 0 0 0 1px rgb(68 132 188 / 0.3);
+}
+
+/* ---------------------------------------------------------------------------
+   3. 图标底板
+
+   特性卡片、空态、统计卡片里的图标统一放在一块 34px 的方板上；
+   悬停时底板亮起、图标放大一点点。用 background-image 而不是 border，
+   是为了让"悬停时描边变亮"不引起 1px 的布局跳动。
+--------------------------------------------------------------------------- */
+.icon-tile {
+  display: grid;
+  place-items: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 9px;
+  color: var(--color-brand-bright);
+  background-image:
+    linear-gradient(var(--color-surface-2), var(--color-surface-2)),
+    linear-gradient(150deg, rgb(68 132 188 / 0.4), transparent 65%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  border: 1px solid transparent;
+  transition:
+    color var(--dur-base) var(--ease-out-soft),
+    box-shadow var(--dur-base) var(--ease-out-soft);
+}
+
+.spotlight-card:hover .icon-tile,
+.group-tile:hover .icon-tile {
+  color: var(--color-brand-soft);
+  box-shadow: 0 0 0 1px rgb(68 132 188 / 0.28) inset;
+}
+
+.icon-tile > svg {
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.spotlight-card:hover .icon-tile > svg {
+  transform: scale(1.12);
+}
+
+/* 大号图标光环：空态与 404 页 */
+.icon-halo {
+  position: relative;
+}
+.icon-halo::before {
+  content: '';
+  position: absolute;
+  inset: -55%;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(circle, rgb(68 132 188 / 0.16), transparent 70%);
+  animation: halo-breathe 5s var(--ease-out-soft) infinite;
+}
+
+@keyframes halo-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   4. 按钮
+
+   只保留两种：`.btn-primary`（实心品牌蓝）与 `.btn-ghost`（描边）。
+   颜色与尺寸仍写在模板的 Tailwind 工具类里（那里要看得到具体数值），
+   这里只补动效：高光扫过、按下回弹、悬停上浮。
+--------------------------------------------------------------------------- */
+.btn-primary,
+.btn-ghost {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    background-color var(--dur-fast) var(--ease-out-soft),
+    border-color var(--dur-fast) var(--ease-out-soft),
+    box-shadow var(--dur-base) var(--ease-out-soft),
+    transform var(--dur-fast) var(--ease-out-soft);
+}
+
+/* 高光扫过：一条倾斜的白光从左掠到右，只在悬停/聚焦时发生一次 */
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 32%,
+    rgb(255 255 255 / 0.28) 50%,
+    transparent 68%
+  );
+  transform: translateX(-120%);
+  transition: transform 620ms var(--ease-out-soft);
+}
+
+.btn-primary:hover::after,
+.btn-primary:focus-visible::after {
+  transform: translateX(120%);
+}
+
+.btn-primary:hover,
+.btn-ghost:hover {
+  transform: translate3d(0, -1px, 0);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 8px 22px -10px rgb(19 122 211 / 0.85);
+}
+
+.btn-ghost:hover {
+  border-color: var(--color-border-strong);
+}
+
+/* ---------------------------------------------------------------------------
+   5. 品牌光晕与光束
+
+   `.brand-glow`  首页/登录页的顶部柔光（低频漂移，不抢内容）
+   `.hero-orb`    两团缓慢自转的锥形渐变，给英雄区一点"活着"的底色
+   `.beam-line`   1px 渐变分隔线，替代生硬的纯色 border
+--------------------------------------------------------------------------- */
+.brand-glow {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(760px 340px at 50% -10%, rgb(68 132 188 / 0.22), transparent 70%),
+    radial-gradient(520px 260px at 82% 18%, rgb(19 122 211 / 0.12), transparent 72%);
+}
+
+.brand-glow::before {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  pointer-events: none;
+  background:
+    radial-gradient(420px 240px at 30% 20%, rgb(68 132 188 / 0.1), transparent 70%),
+    radial-gradient(360px 220px at 72% 40%, rgb(19 122 211 / 0.08), transparent 72%);
+  animation: glow-drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes glow-drift {
+  from {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, 2%, 0) scale(1.08);
+  }
+}
+
+.hero-orb {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(52px);
+  opacity: 0.5;
+  background: conic-gradient(
+    from 0deg,
+    rgb(19 122 211 / 0.5),
+    rgb(164 124 240 / 0.22),
+    rgb(48 164 108 / 0.14),
+    rgb(19 122 211 / 0.5)
+  );
+  animation: orb-spin 34s linear infinite;
+}
+
+.hero-orb--a {
+  width: 460px;
+  height: 460px;
+  top: -220px;
+  left: -140px;
+}
+
+.hero-orb--b {
+  width: 380px;
+  height: 380px;
+  top: -140px;
+  right: -120px;
+  animation-duration: 44s;
+  animation-direction: reverse;
+}
+
+@keyframes orb-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.beam-line {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(68 132 188 / 0.32) 22%,
+    rgb(19 122 211 / 0.55) 50%,
+    rgb(68 132 188 / 0.32) 78%,
+    transparent
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   6. 文字与徽标
+--------------------------------------------------------------------------- */
+
+/* 品牌名渐变：颜色做极慢的横向流动，静态截图下也成立 */
+.text-brand-gradient {
+  background: linear-gradient(
+    100deg,
+    var(--color-text-base) 6%,
+    var(--color-brand-soft) 30%,
+    var(--color-brand-bright) 48%,
+    var(--color-brand-soft) 66%,
+    var(--color-text-base) 92%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: text-sheen 9s linear infinite;
+}
+
+@keyframes text-sheen {
+  from {
+    background-position: 140% 50%;
+  }
+  to {
+    background-position: -40% 50%;
+  }
+}
+
+.logo-float {
+  animation: logo-float 6.5s ease-in-out infinite;
+}
+
+@keyframes logo-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   7. 侧栏导航与滚动进度
+--------------------------------------------------------------------------- */
+.nav-item {
+  position: relative;
+  transition:
+    background-color var(--dur-fast) var(--ease-out-soft),
+    color var(--dur-fast) var(--ease-out-soft);
+}
+
+/* 当前项左侧的短竖条：比整块底色更安静，又能一眼定位 */
+.nav-item[data-active='true']::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -0.5rem;
+  width: 2px;
+  height: 1.05rem;
+  margin-top: -0.525rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--color-brand-bright), var(--color-brand));
+  box-shadow: 0 0 8px rgb(19 122 211 / 0.65);
+}
+
+.nav-item[data-active='true'] .icon {
+  color: var(--color-brand-bright);
+}
+
+/* 滚动进度线：由 ScrollProgress.vue 写 `transform: scaleX(p)`，这里只管外观 */
+.scroll-progress {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-brand) 18%,
+    var(--color-brand-bright) 70%,
+    #6aa9dd
+  );
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-progress {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   8. 菜单、分栏与表格的通用细节
+--------------------------------------------------------------------------- */
+
+/* 账号菜单：向上弹开时带一点位移，避免"凭空出现" */
+.popover-in {
+  animation: popover-in var(--dur-base) var(--ease-out-soft) both;
+  transform-origin: bottom center;
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 顶栏的账号菜单向下弹开：锚点在右上角，从上方微微落位 */
+.popover-in.popover-in--down {
+  transform-origin: top right;
+  animation-name: popover-in-down;
+}
+
+@keyframes popover-in-down {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 首页页脚那条渐变分隔线 */
+.footer-beam {
+  border-top: 1px solid transparent;
+  border-image: linear-gradient(90deg, transparent, rgb(68 132 188 / 0.35), transparent) 1;
+}
+
+/* 输入框聚焦：整个外壳（图标 + 输入框）一起亮起来。
+   Uiverse 的常见做法是"描边从中点向两侧扩展"，这里用更克制的方式：
+   描边变色 + 一圈极淡的外发光，避免 2px 的位移引起布局抖动。 */
+.code-field,
+.field-shell {
+  transition:
+    border-color var(--dur-fast) var(--ease-out-soft),
+    box-shadow var(--dur-base) var(--ease-out-soft),
+    background-color var(--dur-fast) var(--ease-out-soft);
+}
+
+.code-field:focus-within,
+.field-shell:focus-within {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgb(68 132 188 / 0.14);
+}
+
+/* 数字类数值用等宽字体的表格数字，避免变化时左右抖动 */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   9. 加载态：骨架 shimmer
+
+   代替一句"正在加载…"——后者在哑光深色界面上几乎看不出页面在动。
+   幅度刻意做得很小（8% 白），循环动画只允许这一处。
+--------------------------------------------------------------------------- */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background-color: var(--color-surface-2);
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--shimmer-sheen) 45%,
+    var(--shimmer-sheen) 55%,
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: shimmer 1.5s var(--ease-out-soft) infinite;
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   10. 按下回弹
+
+   指针按下时轻微下沉。给所有按钮统一的"被按下"手感，
+   但位移只有 1px——密集操作面板里不需要戏剧性。
+--------------------------------------------------------------------------- */
+.press {
+  transition:
+    transform var(--dur-fast) var(--ease-out-soft),
+    background-color var(--dur-fast) var(--ease-out-soft),
+    border-color var(--dur-fast) var(--ease-out-soft);
+}
+
+/* 按下时只挪动内部内容：外层若已有悬停上浮（`.btn-primary`），
+   两者叠在同一个元素上会互相覆盖，按下就会"弹回原位"。 */
+.press:active:not(:disabled) > * {
+  transform: translate3d(0, 1px, 0);
+}
+
+.press > * {
+  transition: transform var(--dur-fast) var(--ease-out-soft);
+}
+
+/* ===========================================================================
+   无障碍：用户要求减少动态效果时，全部动效退化为静态
+   （不是"变快"，而是取消——包括入场动画，直接以最终状态呈现）
+=========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  [data-reveal-ready='true'] .reveal:not([data-revealed]) {
+    opacity: 1;
+    transform: none;
+  }
+
+  .btn-primary::after,
+  .hero-orb::after,
+  .shimmer::after {
+    display: none;
+  }
+
+  .brand-glow::before,
+  .icon-halo::before,
+  .hero-orb,
+  .logo-float,
+  .text-brand-gradient {
+    animation: none;
+  }
+
+  /* 关掉 shimmer 后骨架只剩底色，用低对比的平色块表达"占位" */
+  .shimmer {
+    background-color: var(--color-surface-3);
+  }
+}
+
+/* ===========================================================================
+   浅色主题下的动效取值
+
+   动效里有一批"白色叠加"（高光、柔光、点阵、骨架反光）和"黑色阴影"，
+   它们只在深色底上成立：白底上白色叠加不可见、黑色阴影会脏。
+   `html[data-theme='light']` 是无层级规则，权重高于上面 `@layer` 里的定义，
+   因此这里直接覆盖即可，组件里仍不需要任何主题分支。
+=========================================================================== */
+html[data-theme='light'] .dot-grid-fade::after {
+  background-image: radial-gradient(var(--grid-dot-strong) 1px, transparent 1px);
+}
+
+html[data-theme='light'] .spotlight-card__glow {
+  background: radial-gradient(
+    220px circle at var(--mx, 50%) var(--my, 0%),
+    rgb(58 118 173 / 0.1),
+    rgb(21 104 180 / 0.04) 42%,
+    transparent 72%
+  );
+}
+
+html[data-theme='light'] .spotlight-card__ring {
+  background: linear-gradient(
+    135deg,
+    rgb(21 104 180 / 0.55),
+    rgb(58 118 173 / 0.2) 38%,
+    transparent 62%
+  );
+}
+
+html[data-theme='light'] .spotlight-card:hover {
+  box-shadow:
+    0 12px 26px -16px var(--shadow-card),
+    0 0 0 1px rgb(58 118 173 / 0.16);
+}
+
+/* 浅色底的卡片要更明显一点才有"抬起"的感觉，因此悬停时底色比页面底稍深 */
+html[data-theme='light'] .spotlight-card:hover {
+  background-color: color-mix(in oklab, var(--color-surface) 92%, var(--color-border-base));
+}
+
+html[data-theme='light'] .icon-tile {
+  background-image:
+    linear-gradient(var(--color-surface-2), var(--color-surface-2)),
+    linear-gradient(150deg, rgb(58 118 173 / 0.35), transparent 65%);
+}
+
+html[data-theme='light'] .icon-halo::before {
+  background: radial-gradient(circle, rgb(58 118 173 / 0.14), transparent 70%);
+}
+
+/* 高光扫过在浅色底上必须有实际对比度，否则等于没有 */
+html[data-theme='light'] .btn-primary::after {
+  background: linear-gradient(
+    100deg,
+    transparent 32%,
+    rgb(255 255 255 / 0.45) 50%,
+    transparent 68%
+  );
+}
+
+html[data-theme='light'] .btn-primary:hover {
+  box-shadow: 0 8px 20px -12px rgb(21 104 180 / 0.7);
+}
+
+html[data-theme='light'] .brand-glow {
+  background:
+    radial-gradient(760px 340px at 50% -10%, rgb(58 118 173 / 0.14), transparent 70%),
+    radial-gradient(520px 260px at 82% 18%, rgb(21 104 180 / 0.08), transparent 72%);
+}
+
+html[data-theme='light'] .brand-glow::before {
+  background:
+    radial-gradient(420px 240px at 30% 20%, rgb(58 118 173 / 0.07), transparent 70%),
+    radial-gradient(360px 220px at 72% 40%, rgb(21 104 180 / 0.05), transparent 72%);
+}
+
+html[data-theme='light'] .hero-orb {
+  opacity: 0.28;
+}
+
+html[data-theme='light'] .shimmer::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--shimmer-sheen) 45%,
+    var(--shimmer-sheen) 55%,
+    transparent
+  );
+}
+
+html[data-theme='light'] .popover-in {
+  box-shadow: 0 12px 28px -14px var(--shadow-card);
+}
+
+/* ---------------------------------------------------------------------------
+   降级：不支持 mask-composite 的浏览器（旧 Firefox）不显示渐变描边层，
+   保留原生 1px 边框——不能出现"边框整体消失"。
+--------------------------------------------------------------------------- */
+@supports not (mask-composite: exclude) {
+  .spotlight-card__ring {
+    display: none;
+  }
+  .spotlight-card:hover {
+    border-color: var(--color-border-strong);
+  }
+}

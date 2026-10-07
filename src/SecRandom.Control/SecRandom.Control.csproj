@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>SecRandom.Control</RootNamespace>
+    <AssemblyName>SecRandom.Control</AssemblyName>
+    <UserSecretsId>secrandom-control</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 身份源模块是**私有构建**才存在的项目：公开副本没有这些目录，通配匹配不到任何东西，
+          于是核心照常独立编译与发布（运行时发现走程序集名约定，见
+          Authentication/IdentityProviderLoader.cs）。
+          这里刻意**不写 ProjectReference**：模块反过来要引用核心（它实现核心的
+          IAuthProvider / IIdentityProviderModule 等抽象），双向静态引用会让 NuGet
+          还原图成环 —— `dotnet restore` 直接报 MSB4006（加 ReferenceOutputAssembly="false"
+          也一样，还原图不看那条元数据）。因此改成"核心编译完之后，用 MSBuild 任务把
+          模块编出来、连同输出拷到核心的 bin/publish 目录"。
+          也刻意**不写死项目名**：核心连"这台机器上装了哪个身份源"都不该知道，
+          更不该因此把某个身份源的名字写进自己的源码。 -->
+    <IdentityProviderModuleProject Include="$(MSBuildProjectDirectory)\..\SecRandom.Control.Identity.*\*.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 控制台 SPA 的构建产物。由 scripts/build-web.mjs 生成到 artifacts/web，
+         存在时才复制到 wwwroot —— 保证 SPA 未构建时服务端仍可独立编译与发布。 -->
+    <WebRootFiles Include="$(MSBuildProjectDirectory)/../../artifacts/web/**/*"
+                  Condition="Exists('$(MSBuildProjectDirectory)/../../artifacts/web')" />
+  </ItemGroup>
+
+  <Target Name="CopyWebAppToWwwRoot" AfterTargets="Build" Condition="'@(WebRootFiles)' != ''">
+    <ItemGroup>
+      <WebAppCopy Include="@(WebRootFiles)">
+        <TargetPath>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+      </WebAppCopy>
+    </ItemGroup>
+    <Copy SourceFiles="@(WebAppCopy)" DestinationFiles="@(WebAppCopy->'$(MSBuildProjectDirectory)/%(TargetPath)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CleanWwwRoot" AfterTargets="Clean">
+    <RemoveDir Directories="$(MSBuildProjectDirectory)/wwwroot" />
+  </Target>
+
+  <!-- 私有构建：把身份源模块编出来并放进核心的输出目录。
+       模块要在运行时被 IdentityProviderLoader 按程序集名发现（LoadFromAssemblyPath
+       从 AppContext.BaseDirectory 读），所以它必须和 SecRandom.Control.dll 同目录。
+       公开副本没有模块目录 → 条件不成立 → 这个目标整段不执行，核心照常编译。 -->
+  <Target Name="BuildIdentityProviderModule" AfterTargets="Build"
+          Condition="'@(IdentityProviderModuleProject)' != '' and '$(IdentityProviderModuleBuildInProgress)' != 'true'">
+    <!-- 模块不在核心的还原图里：没有资产文件时先还原一次，否则报 NETSDK1004。 -->
+    <MSBuild Projects="%(IdentityProviderModuleProject.Identity)" Targets="Restore"
+             Properties="Configuration=$(Configuration)"
+             Condition="!Exists('%(IdentityProviderModuleProject.RootDir)%(IdentityProviderModuleProject.Directory)obj\project.assets.json')" />
+    <!-- BuildProjectReferences=false 是关键：否则模块会反过来触发一次
+         "正在构建的核心"，MSBuild 会报循环依赖。 -->
+    <MSBuild Projects="@(IdentityProviderModuleProject)" Targets="Build"
+             Properties="Configuration=$(Configuration);BuildProjectReferences=false"
+             BuildInParallel="false">
+      <Output TaskParameter="TargetOutputs" ItemName="_IdentityProviderModuleOutput" />
+    </MSBuild>
+    <Copy SourceFiles="@(_IdentityProviderModuleOutput)" DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishIdentityProviderModule" AfterTargets="Publish"
+          Condition="'@(IdentityProviderModuleProject)' != '' and '$(IdentityProviderModuleBuildInProgress)' != 'true'">
+    <MSBuild Projects="%(IdentityProviderModuleProject.Identity)" Targets="Restore"
+             Properties="Configuration=$(Configuration)"
+             Condition="!Exists('%(IdentityProviderModuleProject.RootDir)%(IdentityProviderModuleProject.Directory)obj\project.assets.json')" />
+    <MSBuild Projects="@(IdentityProviderModuleProject)" Targets="Build"
+             Properties="Configuration=$(Configuration);BuildProjectReferences=false"
+             BuildInParallel="false">
+      <Output TaskParameter="TargetOutputs" ItemName="_IdentityProviderModulePublishOutput" />
+    </MSBuild>
+    <Copy SourceFiles="@(_IdentityProviderModulePublishOutput)" DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
