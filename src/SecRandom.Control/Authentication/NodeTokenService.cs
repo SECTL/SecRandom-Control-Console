@@ -35,7 +35,9 @@ public sealed class NodeTokenService(INodeTokenStore store, ILogger<NodeTokenSer
             NodeId = nodeId,
             EnrolledByUserId = enrolledByUserId,
             CreatedAt = now,
-            ExpiresAt = now.Add(lifetime > TimeSpan.Zero ? lifetime : ControlOptions.DefaultNodeTokenLifetime)
+            ExpiresAt = now.Add(lifetime > TimeSpan.Zero
+                ? lifetime
+                : TimeSpan.FromDays(ControlOptions.DefaultNodeTokenLifetimeDays))
         };
 
         await store.SaveAsync(token, cancellationToken).ConfigureAwait(false);

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.Extensions.Options;
 
 namespace SecRandom.Control.Authentication;
@@ -21,6 +20,8 @@ public sealed class NodeTokenAuthenticationHandler(
     public const string ExpiredFailureReason = "node_token_expired";
 
     public const string RevokedFailureReason = "node_token_revoked";
+
+    private const string BearerScheme = "Bearer";
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -64,10 +65,14 @@ public sealed class NodeTokenAuthenticationHandler(
         if (string.IsNullOrWhiteSpace(header))
             return null;
 
-        var scheme = BearerTokenDefaults.AuthenticationScheme;
-        if (!header.StartsWith(scheme + " ", StringComparison.OrdinalIgnoreCase))
+        var separator = header.IndexOf(' ');
+        if (separator <= 0)
             return null;
 
-        return header[(scheme.Length + 1)..].Trim();
+        if (!string.Equals(header[..separator], BearerScheme, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var token = header[(separator + 1)..].Trim();
+        return token.Length == 0 ? null : token;
     }
 }

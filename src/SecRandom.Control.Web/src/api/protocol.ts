@@ -91,6 +91,9 @@ export interface MemberView {
   display_name?: string
 }
 
+export type NodeTokenState = 'none' | 'active' | 'revoked' | 'expired'
+
+
 export interface NodeView {
   node_id: string
   group_id: string
@@ -121,6 +124,15 @@ export interface NodeView {
 
 
   draw_locked: boolean
+  
+  
+  enrolled?: boolean
+  
+  
+  token_state?: NodeTokenState
+  
+  
+  token_expires_at?: string | null
 }
 
 
@@ -660,6 +672,12 @@ export interface ServerMeta {
 
   server_time?: string
   status: string
+  
+  
+  auth_mode?: string | null
+  
+  
+  node_enrollment?: boolean
 }
 
 
@@ -718,6 +736,30 @@ export interface RedeemResultDto {
   role: GroupRole
   group_name: string
   already_member: boolean
+}
+
+export type EnrollmentCodeStatus = 'pending' | 'used' | 'expired' | 'revoked'
+
+
+export interface EnrollmentCodeDto {
+  display_code: string
+  group_id: string
+  node_id?: string | null
+  created_by_user_id?: string | null
+  created_at: string
+  expires_at: string
+  status: EnrollmentCodeStatus
+  used_by_node_id?: string | null
+  used_at?: string | null
+  revoked_at?: string | null
+}
+
+
+export interface NodeTokenDto {
+  node_id: string
+  group_id: string
+  node_token: string
+  expires_at: string
 }
 
 export type TransferStatus = 'pending' | 'confirmed' | 'rejected' | 'expired'

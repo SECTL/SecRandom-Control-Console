@@ -7,6 +7,7 @@ import { api, ApiError } from '@/api/client'
 import { NodeCapability, type NodeCommandDto, type NodeView } from '@/api/protocol'
 import { describeCommandFeedback, type CommandFeedbackView } from '@/utils/command-feedback'
 import { useSessionStore } from '@/stores/session'
+import { useSetupStore } from '@/stores/setup'
 import { NODE_REFRESH_INTERVAL_MS, useAutoRefresh } from '@/composables/useAutoRefresh'
 import { usePresenceEvents } from '@/composables/usePresenceEvents'
 import { formatVersion } from '@/utils/version'
@@ -32,7 +33,12 @@ const emit = defineEmits<{
 
 const { t, tm } = useI18n()
 const session = useSessionStore()
+const setup = useSetupStore()
 const router = useRouter()
+
+const noNodesHintKey = computed(() =>
+  setup.mode === 'local' ? 'group.noNodesHintLocal' : 'group.noNodesHint',
+)
 
 const nodes = ref<NodeView[]>([])
 const loading = ref(false)
@@ -689,7 +695,7 @@ defineExpose({ reload: loadNodes })
         v-if="!loading"
         class="mx-auto mt-1.5 max-w-md text-[12px] leading-relaxed text-text-faint"
       >
-        {{ errorMessage ?? t('group.noNodesHint') }}
+        {{ errorMessage ?? t(noNodesHintKey) }}
       </p>
     </div>
 

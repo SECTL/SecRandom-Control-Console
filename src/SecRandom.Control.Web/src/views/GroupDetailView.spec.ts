@@ -31,6 +31,12 @@ vi.mock('@/api/client', async (importOriginal) => {
       session: vi.fn(),
       listMembers: vi.fn(),
       listNodes: vi.fn(),
+      serverMeta: vi.fn(),
+      listEnrollmentCodes: vi.fn(),
+      createEnrollmentCode: vi.fn(),
+      revokeEnrollmentCode: vi.fn(),
+      issueNodeToken: vi.fn(),
+      revokeNodeToken: vi.fn(),
       renameGroup: vi.fn(),
       
       deleteGroup: vi.fn(),
@@ -103,7 +109,7 @@ async function mountView(
   user: CurrentUser,
   members: MemberDto[] = [],
   nodes: NodeView[] = [],
-  options: { membershipEnabled?: boolean } = {},
+  options: { membershipEnabled?: boolean; nodeEnrollment?: boolean } = {},
 ): Promise<Harness> {
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -126,6 +132,14 @@ async function mountView(
 
   vi.mocked(api.listMembers).mockResolvedValue(members)
   vi.mocked(api.listNodes).mockResolvedValue(nodes)
+  vi.mocked(api.listEnrollmentCodes).mockResolvedValue([])
+  vi.mocked(api.serverMeta).mockResolvedValue({
+    service: 'secrandom-control',
+    protocol: '1',
+    server_version: '0.1.0',
+    status: 'ready',
+    ...(options.nodeEnrollment === undefined ? {} : { node_enrollment: options.nodeEnrollment }),
+  })
   
   vi.mocked(api.pendingTransfer).mockResolvedValue(null)
 
@@ -1438,5 +1452,43 @@ describe('GroupDetailView 关闭成员功能时', () => {
     
     expect(wrapper.find('[data-testid="nodes-refresh"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="tab-nodes"]').attributes('data-active')).toBe('true')
+  })
+})
+
+describe('GroupDetailView 设备接入面板', () => {
+  beforeEach(() => {
+    vi.mocked(api.session).mockReset()
+    vi.mocked(api.listMembers).mockReset()
+    vi.mocked(api.listNodes).mockReset()
+    vi.mocked(api.listEnrollmentCodes).mockReset()
+    vi.mocked(api.serverMeta).mockReset()
+  })
+
+  it('本地模式下成员功能关着，接入码面板照样出现', async () => {
+    const { wrapper } = await mountView(userWith('owner', '张老师'), [], [], {
+      membershipEnabled: false,
+      nodeEnrollment: true,
+    })
+
+    expect(wrapper.find('[data-testid="enrollment-create"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain(zhCN.group.enrollment.title)
+    expect(wrapper.find('[data-testid="tab-members"]').exists()).toBe(false)
+  })
+
+  it('服务端没有声明 node_enrollment 时不渲染接入码面板', async () => {
+    const { wrapper } = await mountView(userWith('owner', '张老师'), [], [], {
+      nodeEnrollment: false,
+    })
+
+    expect(wrapper.find('[data-testid="enrollment-create"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="nodes-refresh"]').exists()).toBe(true)
+  })
+
+  it('普通成员看不到接入码面板', async () => {
+    const { wrapper } = await mountView(userWith('operator', '张老师'), [], [], {
+      nodeEnrollment: true,
+    })
+
+    expect(wrapper.find('[data-testid="enrollment-create"]').exists()).toBe(false)
   })
 })

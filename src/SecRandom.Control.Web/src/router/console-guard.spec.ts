@@ -20,6 +20,7 @@ function context(overrides: Partial<ConsoleGuardContext> = {}): ConsoleGuardCont
     serviceUnavailable: () => false,
     load: vi.fn(async () => {}),
     redirectToSectlLogin: vi.fn(),
+    localMode: () => false,
     ...overrides,
   }
 }
@@ -83,6 +84,18 @@ describe('guardConsoleEntry', () => {
 
     
     expect(result).toBe(LOGIN_ROUTE)
+    expect(redirectToSectlLogin).not.toHaveBeenCalled()
+  })
+
+  it('本地模式下未登录进控制台：改去本地登录页，并带上原始目标', async () => {
+    const redirectToSectlLogin = vi.fn()
+    const result = await guardConsoleEntry(
+      route('/console/groups/g-1'),
+      route('/'),
+      context({ isSignedIn: () => false, localMode: () => true, redirectToSectlLogin }),
+    )
+
+    expect(result).toBe(`${LOGIN_ROUTE}?return_to=${encodeURIComponent('/console/groups/g-1')}`)
     expect(redirectToSectlLogin).not.toHaveBeenCalled()
   })
 })

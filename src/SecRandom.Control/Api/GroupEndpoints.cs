@@ -60,6 +60,14 @@ public static class GroupEndpoints
                 result.Add(ToDto(item, member.Role, OwnerDisplayName(item, members)));
             }
 
+            var tokenGroupId = NodeTokenScopeGate.ResolveTokenGroupId(principal);
+            if (tokenGroupId is not null)
+            {
+                result = result
+                    .Where(item => string.Equals(item.GroupId, tokenGroupId, StringComparison.Ordinal))
+                    .ToList();
+            }
+
             
             var ranks = GroupOrdering.Ranks(
                 await orderStore.GetOrderAsync(caller.UserId, cancellationToken).ConfigureAwait(false));

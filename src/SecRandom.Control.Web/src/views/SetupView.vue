@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   ArrowLeft,
@@ -26,9 +26,11 @@ import SpotlightCard from '@/components/SpotlightCard.vue'
 
 const { t } = useI18n()
 const setup = useSetupStore()
+const router = useRouter()
 
 type Step = 'mode' | 'identity' | 'token' | 'done'
 
+const LOGIN_REDIRECT_DELAY_MS = 1500
 
 const finished = ref(false)
 const step = ref<Step>('mode')
@@ -113,8 +115,9 @@ const submitErrorMessage = computed(() =>
   apiErrorMessage(t, 'setup.errors', submitCode.value, {
     status: submitStatus.value,
     overrides: {
+      401: 'setup.errors.setup_token_invalid',
       429: 'setup.errors.setup_rate_limited',
-      503: 'setup.errors.not_configured',
+      503: 'setup.errors.auth_not_configured',
     },
   }),
 )
@@ -155,6 +158,23 @@ function goPrevious(): void {
   if (previous) step.value = previous
 }
 
+let loginRedirectTimer: number | null = null
+
+function scheduleLoginRedirect(): void {
+  if (loginRedirectTimer !== null) return
+  loginRedirectTimer = window.setTimeout(() => {
+    loginRedirectTimer = null
+    void router.replace({ name: 'login' })
+  }, LOGIN_REDIRECT_DELAY_MS)
+}
+
+function finishSetup(modeId: string): void {
+  setup.markInitialized(modeId)
+  finished.value = true
+  step.value = 'done'
+  scheduleLoginRedirect()
+}
+
 async function submit(): Promise<void> {
   if (submitting.value || !canAdvance.value || !mode.value) return
 
@@ -178,9 +198,7 @@ async function submit(): Promise<void> {
         : {}),
     })
 
-    setup.markInitialized(mode.value.id)
-    finished.value = true
-    step.value = 'done'
+    finishSetup(mode.value.id)
   } catch (caught) {
     const { code, status } = toErrorLike(caught)
     submitCode.value = code
@@ -188,9 +206,7 @@ async function submit(): Promise<void> {
 
     
     if (status === 409 || code === 'already_initialized') {
-      setup.markInitialized(mode.value.id)
-      finished.value = true
-      step.value = 'done'
+      finishSetup(mode.value.id)
     }
   } finally {
     submitting.value = false
@@ -206,6 +222,10 @@ onMounted(async () => {
   
   if (!setup.loaded && !setup.loading) await setup.load()
   preselectMode()
+})
+
+onBeforeUnmount(() => {
+  if (loginRedirectTimer !== null) window.clearTimeout(loginRedirectTimer)
 })
 </script>
 

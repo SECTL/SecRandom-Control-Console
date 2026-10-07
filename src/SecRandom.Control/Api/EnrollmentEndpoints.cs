@@ -5,6 +5,7 @@ using SecRandom.Control.Configuration;
 using SecRandom.Control.Domain;
 using SecRandom.Control.Setup;
 using SecRandom.Control.Storage;
+using SecRandom.Control.Transport;
 
 namespace SecRandom.Control.Api;
 

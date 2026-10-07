@@ -332,8 +332,7 @@ public static class NodeEndpoints
                     existing is not null
                         && (await store.GetDesiredStateAsync(groupId, nodeId, cancellationToken).ConfigureAwait(false))
                             ?.DrawLocked == true,
-                    tokenView,
-                    tokenView.Fallback),
+                    tokenView),
                 statusCode: existing is null ? StatusCodes.Status201Created : StatusCodes.Status200OK);
         });
 
@@ -410,13 +409,11 @@ public static class NodeEndpoints
         DateTimeOffset now,
         TimeSpan offlineAfter,
         bool drawLocked,
-        NodeTokenView tokenView,
-        NodeToken? tokenFallback = null)
+        NodeTokenView tokenView)
     {
         
         
         var online = node.LastHeartbeatAt is { } heartbeat && now - heartbeat < offlineAfter;
-        var token = tokenView.Active ?? tokenFallback;
 
         return new NodeDto(
             node.NodeId,
@@ -432,7 +429,7 @@ public static class NodeEndpoints
             drawLocked,
             string.Equals(tokenView.State, "active", StringComparison.Ordinal),
             tokenView.State,
-            token?.ExpiresAt);
+            tokenView.Token?.ExpiresAt);
     }
 
     private static async Task<Dictionary<string, NodeTokenView>> LoadTokenStatesAsync(
@@ -451,15 +448,14 @@ public static class NodeEndpoints
             var isActive = active.TryGetValue(token.NodeId, out var current)
                 && string.Equals(current.TokenId, token.TokenId, StringComparison.Ordinal);
 
-            if (result.TryGetValue(token.NodeId, out var existing))
+            if (result.TryGetValue(token.NodeId, out var existing)
+                && (string.Equals(existing.State, "active", StringComparison.Ordinal) || !isActive))
             {
-                if (string.Equals(existing.State, "active", StringComparison.Ordinal) || !isActive)
-                    continue;
+                continue;
             }
 
-            result[token.NodeId] = new NodeTokenView(
-                isActive ? "active" : token.IsRevoked ? "revoked" : "expired",
-                isActive ? token : null);
+            result[token.NodeId] = NodeTokenView.FromToken(
+                isActive ? "active" : token.IsRevoked ? "revoked" : "expired", token, isActive);
         }
 
         return result;
@@ -474,7 +470,7 @@ public static class NodeEndpoints
     {
         var active = await tokens.GetActiveByNodeAsync(groupId, nodeId, now, cancellationToken).ConfigureAwait(false);
         if (active is not null)
-            return new NodeTokenView("active", active);
+            return NodeTokenView.FromToken("active", active, active: true);
 
         var history = await tokens.ListByNodeAsync(groupId, nodeId, cancellationToken).ConfigureAwait(false);
         if (history.Count == 0)
@@ -482,13 +478,11 @@ public static class NodeEndpoints
 
         foreach (var token in history)
         {
-            if (!token.IsRevoked)
-                continue;
-
-            return new NodeTokenView("revoked", token);
+            if (token.IsRevoked)
+                return NodeTokenView.FromToken("revoked", token, active: false);
         }
 
-        return new NodeTokenView("expired", history[0]);
+        return NodeTokenView.FromToken("expired", history[0], active: false);
     }
 
     

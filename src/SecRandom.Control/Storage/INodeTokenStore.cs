@@ -9,6 +9,9 @@ public interface INodeTokenStore
     Task<IReadOnlyList<NodeToken>> ListByNodeAsync(
         string groupId, string nodeId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<NodeToken>> ListByGroupAsync(
+        string groupId, CancellationToken cancellationToken = default);
+
     Task<NodeToken?> GetActiveByNodeAsync(
         string groupId, string nodeId, DateTimeOffset now, CancellationToken cancellationToken = default);
 

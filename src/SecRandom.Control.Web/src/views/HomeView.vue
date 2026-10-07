@@ -34,6 +34,10 @@ const setup = useSetupStore()
 
 const showJoinEntry = computed(() => setup.membershipEnabled)
 
+const descriptionKey = computed(() =>
+  setup.mode === 'local' ? 'home.descriptionLocal' : 'home.description',
+)
+
 
 const meta = ref<ServerMeta | null>(null)
 
@@ -117,14 +121,11 @@ const copyrightText = computed(() => t('home.copyright', { years: copyrightYears
         >
           <span class="text-brand-gradient">{{ t('common.appName') }}</span>
         </h1>
-        <p class="reveal mt-3 text-[15px] font-medium text-brand-bright" data-reveal>
-          {{ t('home.tagline') }}
-        </p>
         <p
           class="reveal mx-auto mt-5 max-w-2xl text-[13.5px] leading-relaxed text-text-muted"
           data-reveal
         >
-          {{ t('home.description') }}
+          {{ t(descriptionKey) }}
         </p>
 
         <div

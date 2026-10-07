@@ -5,15 +5,13 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { useSessionWatchdog } from './useSessionWatchdog'
 import { useSessionStore } from '@/stores/session'
+import { useSetupStore } from '@/stores/setup'
 import type { CurrentUser } from '@/api/protocol'
 
-
-
-
-
-
-
 const signedInUser: CurrentUser = { user_id: 'u-1', display_name: '张老师', groups: [] }
+
+let originalLocation: Location
+let navigatedTo: string | null = null
 
 interface Harness {
   wrapper: VueWrapper
@@ -21,7 +19,12 @@ interface Harness {
   redirect: ReturnType<typeof vi.fn>
 }
 
-async function mountWatchdog(path: string): Promise<Harness> {
+interface HarnessOptions {
+  localMode?: boolean
+  useDefaultRedirect?: boolean
+}
+
+async function mountWatchdog(path: string, options: HarnessOptions = {}): Promise<Harness> {
   const pinia = createPinia()
   setActivePinia(pinia)
 
@@ -40,10 +43,19 @@ async function mountWatchdog(path: string): Promise<Harness> {
   session.user = signedInUser
   session.loaded = true
 
+  if (options.localMode === true) {
+    useSetupStore(pinia).markInitialized('local')
+  }
+
   const redirect = vi.fn()
+  const useDefaultRedirect = options.useDefaultRedirect === true
   const Host = defineComponent({
     setup() {
-      useSessionWatchdog({ redirect, intervalMs: 1000 })
+      if (useDefaultRedirect) {
+        useSessionWatchdog({ intervalMs: 1000 })
+      } else {
+        useSessionWatchdog({ redirect, intervalMs: 1000 })
+      }
       return () => h('div')
     },
   })
@@ -54,10 +66,27 @@ async function mountWatchdog(path: string): Promise<Harness> {
 
 describe('useSessionWatchdog', () => {
   beforeEach(() => {
+    originalLocation = window.location
+    navigatedTo = null
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: {
+        href: originalLocation.href,
+        assign: (url: string) => {
+          navigatedTo = url
+        },
+      },
+    })
     vi.useFakeTimers()
   })
 
   afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    })
     vi.useRealTimers()
   })
 
@@ -74,7 +103,7 @@ describe('useSessionWatchdog', () => {
 
   it('控制台里会话失效（例如在官网退出登录）时跳回 SECTL 授权', async () => {
     const { session, redirect } = await mountWatchdog('/console/groups/g-1')
-    
+
     session.load = vi.fn(async () => {
       session.user = null
     })
@@ -107,5 +136,34 @@ describe('useSessionWatchdog', () => {
     await flushPromises()
 
     expect(redirect).not.toHaveBeenCalled()
+  })
+
+  it('本地模式会话失效：跳本地登录页，并带上原始目标', async () => {
+    const { session } = await mountWatchdog('/console/groups/g-1', {
+      localMode: true,
+      useDefaultRedirect: true,
+    })
+
+    session.load = vi.fn(async () => {
+      session.user = null
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushPromises()
+
+    expect(navigatedTo).toBe(`/login?return_to=${encodeURIComponent('/console/groups/g-1')}`)
+  })
+
+  it('本地模式之外仍跳 SECTL 授权（官方云行为不变）', async () => {
+    const { session } = await mountWatchdog('/console', { useDefaultRedirect: true })
+
+    session.load = vi.fn(async () => {
+      session.user = null
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushPromises()
+
+    expect(navigatedTo).toBe(`/api/auth/login?return_to=${encodeURIComponent('/console')}`)
   })
 })

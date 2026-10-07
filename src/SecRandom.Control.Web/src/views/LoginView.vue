@@ -67,6 +67,10 @@ function retry(): void {
 
 const usePasswordLogin = computed(() => setup.initialized && setup.mode === 'local')
 
+const signInTitleKey = computed(() =>
+  usePasswordLogin.value ? 'auth.signInTitleLocal' : 'auth.signInTitle',
+)
+
 const username = ref('')
 const password = ref('')
 const submitting = ref(false)
@@ -161,7 +165,7 @@ onMounted(async () => {
               class="logo-float mx-auto h-14 w-14 rounded-[16px]"
             />
             <h1 class="mt-4 text-[16px] font-semibold tracking-wide">{{ t('common.appName') }}</h1>
-            <h2 class="mt-1.5 text-[12.5px] text-text-muted">{{ t('auth.signInTitle') }}</h2>
+            <h2 class="mt-1.5 text-[12.5px] text-text-muted">{{ t(signInTitleKey) }}</h2>
 
             <div
               v-if="errorMessage"

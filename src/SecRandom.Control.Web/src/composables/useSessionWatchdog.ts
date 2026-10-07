@@ -1,7 +1,8 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { CONSOLE_PATH_PREFIX, redirectToSectlLogin } from '@/router/console-guard'
+import { CONSOLE_PATH_PREFIX, redirectToLocalLogin, redirectToSectlLogin } from '@/router/console-guard'
 import { useSessionStore } from '@/stores/session'
+import { useSetupStore } from '@/stores/setup'
 
 
 
@@ -30,11 +31,22 @@ export interface SessionWatchdogOptions {
 
 
 export function useSessionWatchdog(options: SessionWatchdogOptions = {}): void {
-  const redirect = options.redirect ?? redirectToSectlLogin
   const intervalMs = options.intervalMs ?? SESSION_CHECK_INTERVAL_MS
 
   const session = useSessionStore()
+  const setup = useSetupStore()
   const route = useRoute()
+
+  const redirect =
+    options.redirect ??
+    ((returnTo: string) => {
+      if (setup.mode === 'local') {
+        redirectToLocalLogin(returnTo)
+        return
+      }
+
+      redirectToSectlLogin(returnTo)
+    })
 
   let timer: ReturnType<typeof setInterval> | undefined
   let lastCheckAt = 0

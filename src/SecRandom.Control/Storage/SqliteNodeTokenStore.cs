@@ -42,6 +42,22 @@ public sealed class SqliteNodeTokenStore(SqliteDatabase database) : INodeTokenSt
         return tokens;
     }
 
+    public async Task<IReadOnlyList<NodeToken>> ListByGroupAsync(
+        string groupId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"{TokenSelect} WHERE group_id = @groupId ORDER BY created_at DESC";
+        command.Parameters.AddWithValue("@groupId", groupId);
+
+        var tokens = new List<NodeToken>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            tokens.Add(ReadToken(reader));
+
+        return tokens;
+    }
+
     public async Task<NodeToken?> GetActiveByNodeAsync(
         string groupId, string nodeId, DateTimeOffset now, CancellationToken cancellationToken = default)
     {

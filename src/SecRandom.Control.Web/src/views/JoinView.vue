@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Info, Link2, Ticket } from '@lucide/vue'
 import { useSessionStore } from '@/stores/session'
+import { useSetupStore } from '@/stores/setup'
 import { api, ApiError, buildLoginUrl } from '@/api/client'
 import { extractInviteCode, looksLikeJoinLinkWithoutCode } from '@/utils/invite-code'
 import SiteHeader from '@/components/SiteHeader.vue'
@@ -14,6 +15,7 @@ const props = defineProps<{ code: string }>()
 const { t, te } = useI18n()
 const router = useRouter()
 const session = useSessionStore()
+const setup = useSetupStore()
 
 const enteredCode = ref(props.code)
 const submitting = ref(false)
@@ -60,6 +62,18 @@ const errorMessage = computed(() => {
 
 const loginHref = computed(
   () => buildLoginUrl(`/join?code=${encodeURIComponent(enteredCode.value)}`),
+)
+
+const useLocalSignIn = computed(() => setup.mode === 'local')
+
+const signInHref = computed(() => (useLocalSignIn.value ? '/login' : loginHref.value))
+
+const signInTitleKey = computed(() =>
+  useLocalSignIn.value ? 'auth.signInTitleLocal' : 'auth.signInTitle',
+)
+
+const signInFirstKey = computed(() =>
+  useLocalSignIn.value ? 'join.signInFirstLocal' : 'join.signInFirst',
 )
 
 async function redeem(): Promise<void> {
@@ -123,12 +137,12 @@ async function redeem(): Promise<void> {
           class="reveal rounded-card border border-border-base bg-surface p-5"
         >
           <div data-reveal>
-            <h2 class="text-[15px] font-semibold">{{ t('auth.signInTitle') }}</h2>
+            <h2 class="text-[15px] font-semibold">{{ t(signInTitleKey) }}</h2>
             <a
-              :href="loginHref"
+              :href="signInHref"
               class="btn-primary press mt-4 inline-flex w-full items-center justify-center rounded-control border border-brand bg-brand px-4 py-2.5 text-[13px] font-medium text-white hover:bg-brand-hover"
             >
-              {{ t('join.signInFirst') }}
+              {{ t(signInFirstKey) }}
             </a>
             <div
               class="mt-3 flex gap-2 rounded-control border border-info/30 bg-info/12 p-2.5 text-[12px] leading-relaxed text-info"

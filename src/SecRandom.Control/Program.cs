@@ -174,7 +174,10 @@ builder.Services.AddAuthorization(options =>
 {
     options.DefaultPolicy = new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
-        .AddAuthenticationSchemes(AuthConstants.SessionSchemeName, AuthConstants.AppBearerSchemeName)
+        .AddAuthenticationSchemes(
+            AuthConstants.SessionSchemeName,
+            AuthConstants.AppBearerSchemeName,
+            AuthConstants.NodeDeviceTokenSchemeName)
         .Build();
 });
 
@@ -199,6 +202,7 @@ builder.Services.AddSingleton<NodeTokenService>();
 
 
 builder.Services.AddHostedService<AuditRetentionService>();
+builder.Services.AddHostedService<NodeCredentialRetentionService>();
 builder.Services.AddSingleton<JsonToSqliteImporter>();
 builder.Services.AddSingleton<IAuthorizationGate, AuthorizationGate>();
 builder.Services.AddSingleton<INodeConnectionRegistry, NodeConnectionRegistry>();
@@ -237,22 +241,22 @@ if (!string.IsNullOrEmpty(webRoot) && Directory.Exists(webRoot))
 app.UseWebSockets();
 
 app.UseAuthentication();
+app.UseMiddleware<NodeTokenScopeGate>();
 app.UseAuthorization();
 
 app.UseMiddleware<InstanceSetupGate>();
 app.UseMiddleware<LocalModeCapabilityGate>();
-app.UseMiddleware<NodeTokenScopeGate>();
 
 app.MapGet("/healthz", () => Results.Json(new { status = "ok" }));
 
-app.MapGet("/v1/meta", (IOptions<ControlOptions> options) => Results.Json(new
+app.MapGet("/v1/meta", (IOptions<ControlOptions> options, InstanceSetupState setupState) => Results.Json(new
 {
     service = "secrandom-control",
     protocol = ControlOptions.ProtocolVersion,
     server_version = ResolveVersion(),
-    
-    
-    
+    auth_mode = setupState.Store.Current?.Mode ?? string.Empty,
+    node_enrollment = options.Value.NodeEnrollmentEnabled
+        && string.Equals(setupState.Store.Current?.Mode, "local", StringComparison.OrdinalIgnoreCase),
     server_time = DateTimeOffset.UtcNow.ToString("O"),
     
     

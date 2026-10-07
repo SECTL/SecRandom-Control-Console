@@ -13,6 +13,7 @@ import GroupMembersPanel from '@/components/GroupMembersPanel.vue'
 import GroupInvitesPanel from '@/components/GroupInvitesPanel.vue'
 import GroupAuditPanel from '@/components/GroupAuditPanel.vue'
 import GroupTransferPanel from '@/components/GroupTransferPanel.vue'
+import NodeEnrollmentPanel from '@/components/NodeEnrollmentPanel.vue'
 import NodeListPanel from '@/components/NodeListPanel.vue'
 
 const props = defineProps<{ groupId: string }>()
@@ -469,12 +470,15 @@ watch(activeTab, (tab) => {
       </div>
 
       
-      <NodeListPanel
-        v-if="activeTab === 'nodes'"
-        :key="groupId"
-        :group-id="groupId"
-        @counts="nodeCounts = $event"
-      />
+      <template v-if="activeTab === 'nodes'">
+        <NodeEnrollmentPanel :group-id="groupId" :can-manage="canManage" />
+
+        <NodeListPanel
+          :key="groupId"
+          :group-id="groupId"
+          @counts="nodeCounts = $event"
+        />
+      </template>
 
       
       <template v-else-if="activeTab === 'members' && membershipEnabled">

@@ -131,6 +131,7 @@ export interface MessageSchema {
     step: {
       mode: string
       displayName: string
+      identity: string
       token: string
     }
     modeLabel: string
@@ -160,10 +161,12 @@ export interface MessageSchema {
       setup_token_invalid: string
       already_initialized: string
       setup_rate_limited: string
+      too_many_attempts: string
       mode_not_available: string
       admin_username_invalid: string
       admin_password_too_short: string
-      not_configured: string
+      auth_not_configured: string
+      invalid_request: string
     }
   }
   join: {
@@ -321,6 +324,50 @@ export interface MessageSchema {
     batchConfigHint: string
     
     batchConfigNoTargets: string
+    enrollment: {
+      title: string
+      hint: string
+      create: string
+      refresh: string
+      newCodeTitle: string
+      newCodeHint: string
+      remaining: string
+      expired: string
+      copyCode: string
+      copied: string
+      revoke: string
+      revokeCodeConfirmTitle: string
+      revokeCodeConfirmBody: string
+      codesTitle: string
+      codesEmpty: string
+      codePending: string
+      codeUsed: string
+      codeExpired: string
+      codeRevoked: string
+      codeExpiresAt: string
+      devicesTitle: string
+      devicesEmpty: string
+      accessEnrolled: string
+      accessNone: string
+      accessExpired: string
+      accessRevoked: string
+      accessEnrolledCount: string
+      accessNoneCount: string
+      stateOnline: string
+      stateOffline: string
+      permissionAllowed: string
+      permissionDenied: string
+      tokenExpiresAt: string
+      issueToken: string
+      reissueToken: string
+      revokeToken: string
+      revokeTokenConfirmTitle: string
+      revokeTokenConfirmBody: string
+      tokenTitle: string
+      tokenHint: string
+      copyToken: string
+      close: string
+    }
   }
   
 
@@ -1114,6 +1161,14 @@ export interface MessageSchema {
     invite_used: string
     invite_revoked: string
     invite_not_for_caller: string
+    enrollment_disabled: string
+    enrollment_code_invalid: string
+    enrollment_code_expired: string
+    enrollment_code_used: string
+    enrollment_code_revoked: string
+    node_mismatch: string
+    node_token_revoked: string
+    too_many_attempts: string
     
     invite_already_member: string
     transfer_not_found: string

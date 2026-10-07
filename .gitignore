@@ -9,9 +9,13 @@ obj/
 artifacts/
 # 前端构建产物会被复制进服务端的 wwwroot —— 生成物，不进版本库。
 src/SecRandom.Control/wwwroot/
+# 仓库根目录下的 wwwroot/ 是历史遗留的产物副本（服务端只读项目目录里的那份）。
+/wwwroot/
 
 # ── 本地数据（SQLite、会话、密钥环、初始化配置）─────────────────────────────
-data/
+# 每个实例一个数据根目录（data/、data-fresh/、data-<名字>/ ……），里面有账号口令散列、
+# 数据保护密钥环与设备令牌散列，**任何情况下都不能进版本库**。
+/data*/
 *.db
 *.db-wal
 *.db-shm

@@ -114,6 +114,14 @@ describe('LoginView 本地账号登录', () => {
     })
   })
 
+  it('本地模式：副标题不再提思拓创联，改用本机管理员口径', async () => {
+    const { wrapper } = await mountLogin()
+
+    expect(actions(wrapper)).toContain(zhCN.auth.signInTitleLocal)
+    expect(actions(wrapper)).not.toContain(zhCN.auth.signInTitle)
+    expect(actions(wrapper)).not.toContain('思拓创联')
+  })
+
   it('状态未知（请求失败）：保持整页授权按钮的原行为', async () => {
     const { wrapper } = await mountLogin({ status: null })
 

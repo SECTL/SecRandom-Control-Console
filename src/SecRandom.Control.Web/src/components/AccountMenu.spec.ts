@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AccountMenu from './AccountMenu.vue'
 import { api } from '@/api/client'
 import { useSessionStore } from '@/stores/session'
+import { useSetupStore } from '@/stores/setup'
 import zhCN from '@/i18n/locales/zh-CN'
 import type { CurrentUser } from '@/api/protocol'
 
@@ -30,9 +31,21 @@ interface Harness {
   session: ReturnType<typeof useSessionStore>
 }
 
-async function mountMenu(user: CurrentUser = signedInUser): Promise<Harness> {
+async function mountMenu(user: CurrentUser = signedInUser, localMode = false): Promise<Harness> {
   const pinia = createPinia()
   setActivePinia(pinia)
+
+  if (localMode) {
+    const setup = useSetupStore(pinia)
+    setup.loaded = true
+    setup.status = {
+      initialized: true,
+      mode: 'local',
+      display_name: '测试实例',
+      membership_enabled: false,
+      modes: [],
+    }
+  }
 
   const router = createRouter({
     history: createMemoryHistory(),
@@ -73,6 +86,14 @@ describe('AccountMenu', () => {
     expect(trigger(wrapper).text()).toContain('张')
     
     expect(trigger(wrapper).text()).toContain(zhCN.console.signedInViaSectl)
+  })
+
+  it('本地模式：触发器副标题说本地账号，不再提思拓创联', async () => {
+    const { wrapper } = await mountMenu(signedInUser, true)
+
+    expect(trigger(wrapper).text()).toContain(zhCN.console.signedInViaLocal)
+    expect(trigger(wrapper).text()).not.toContain(zhCN.console.signedInViaSectl)
+    expect(trigger(wrapper).text()).not.toContain('思拓创联')
   })
 
   it('点击触发器弹出菜单，菜单里有退出登录', async () => {

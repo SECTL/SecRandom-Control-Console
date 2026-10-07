@@ -7,11 +7,13 @@ import type {
   GroupRole,
   InviteDto,
   DesiredStateResult,
+  EnrollmentCodeDto,
   MemberDto,
   MediaPlayAction,
   MediaPlayOptions,
   MediaPlayPayload,
   NodeCommandDto,
+  NodeTokenDto,
   NodeView,
   PendingTransferBriefDto,
   RedeemResultDto,
@@ -344,6 +346,36 @@ export const api = {
   removeNode: (groupId: string, nodeId: string) =>
     request<void>(
       `/v1/groups/${encodeURIComponent(groupId)}/nodes/${encodeURIComponent(nodeId)}`,
+      { method: 'DELETE' },
+    ),
+
+  createEnrollmentCode: (groupId: string, nodeId?: string) =>
+    request<EnrollmentCodeDto>(`/v1/groups/${encodeURIComponent(groupId)}/enrollment-codes`, {
+      method: 'POST',
+      body: nodeId === undefined ? {} : { node_id: nodeId },
+    }),
+
+  listEnrollmentCodes: (groupId: string, signal?: AbortSignal) =>
+    request<EnrollmentCodeDto[]>(
+      `/v1/groups/${encodeURIComponent(groupId)}/enrollment-codes`,
+      signal ? { signal } : {},
+    ),
+
+  revokeEnrollmentCode: (groupId: string, code: string) =>
+    request<void>(
+      `/v1/groups/${encodeURIComponent(groupId)}/enrollment-codes/${encodeURIComponent(code)}`,
+      { method: 'DELETE' },
+    ),
+
+  issueNodeToken: (groupId: string, nodeId: string) =>
+    request<NodeTokenDto>(
+      `/v1/groups/${encodeURIComponent(groupId)}/nodes/${encodeURIComponent(nodeId)}/token`,
+      { method: 'POST' },
+    ),
+
+  revokeNodeToken: (groupId: string, nodeId: string) =>
+    request<void>(
+      `/v1/groups/${encodeURIComponent(groupId)}/nodes/${encodeURIComponent(nodeId)}/token`,
       { method: 'DELETE' },
     ),
 

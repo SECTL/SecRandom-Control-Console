@@ -74,7 +74,7 @@ async function mountSetup(options: { status?: SetupState | null; loaded?: boolea
   })
   await flushPromises()
 
-  return { wrapper, setup }
+  return { wrapper, setup, router }
 }
 
 
@@ -98,6 +98,15 @@ describe('SetupView 初始化向导', () => {
     const mode = wrapper.get('[data-testid="setup-mode-local"]')
     expect(mode.attributes('data-selected')).toBe('true')
     expect(wrapper.get('[data-testid="setup-next"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('步骤条显示三语文案，而不是 i18n 键名', async () => {
+    const { wrapper } = await mountSetup()
+
+    const steps = wrapper.get('[data-testid="setup-steps"]').text()
+    expect(steps).not.toContain('setup.step.')
+    expect(steps).toContain(zhCN.setup.step.identity)
+    expect(steps).toContain(zhCN.setup.step.token)
   })
 
   it('不可用的模式置灰且选不中', async () => {
@@ -174,6 +183,24 @@ describe('SetupView 初始化向导', () => {
     expect(setup.initialized).toBe(true)
   })
 
+  it('初始化成功后会自动跳到登录页，完成卡片与出口链接仍在', async () => {
+    const { wrapper, router } = await mountSetup()
+    await reachTokenStep(wrapper)
+
+    await wrapper.get('[data-testid="setup-token"]').setValue('tok-123')
+    await wrapper.get('[data-testid="setup-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="setup-finished"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="setup-go-login"]').attributes('href')).toBe('/login')
+    expect(router.currentRoute.value.name).toBe('setup')
+
+    await new Promise((resolve) => setTimeout(resolve, 1800))
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
   it('令牌无效：留在令牌这一步并说清楚去日志里重取', async () => {
     vi.mocked(api.setup).mockRejectedValue(new ApiError('setup_token_invalid', 401))
     const { wrapper, setup } = await mountSetup()
@@ -201,6 +228,35 @@ describe('SetupView 初始化向导', () => {
 
     expect(wrapper.get('[data-testid="setup-error"]').text()).toContain(
       zhCN.setup.errors.setup_rate_limited,
+    )
+  })
+
+  it('口令被服务端轮换后返回 unauthorized：说清是令牌不对，而不是通用失败文案', async () => {
+    vi.mocked(api.setup).mockRejectedValue(new ApiError('unauthorized', 401))
+    const { wrapper } = await mountSetup()
+    await reachTokenStep(wrapper)
+
+    await wrapper.get('[data-testid="setup-token"]').setValue('tok-123')
+    await wrapper.get('[data-testid="setup-submit"]').trigger('click')
+    await flushPromises()
+
+    const message = wrapper.get('[data-testid="setup-error"]').text()
+    expect(message).toContain('安装令牌不正确')
+    expect(message).not.toContain(zhCN.errors.unknown)
+    expect(wrapper.find('[data-testid="setup-step-token"]').exists()).toBe(true)
+  })
+
+  it('503：服务端没装身份源时直接说明，而不是说向导没做完', async () => {
+    vi.mocked(api.setup).mockRejectedValue(new ApiError('auth_not_configured', 503))
+    const { wrapper } = await mountSetup()
+    await reachTokenStep(wrapper)
+
+    await wrapper.get('[data-testid="setup-token"]').setValue('tok-123')
+    await wrapper.get('[data-testid="setup-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="setup-error"]').text()).toContain(
+      zhCN.setup.errors.auth_not_configured,
     )
   })
 

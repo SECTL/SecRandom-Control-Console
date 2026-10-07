@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import ConsoleLayout from '@/layouts/ConsoleLayout.vue'
 import { guardConsoleEntry, redirectToSectlLogin } from './console-guard'
 import { guardSetupEntry, SETUP_ROUTE } from './setup-guard'
+import { resolveJoinRedirect } from './join-guard'
 
 
 
@@ -132,11 +133,18 @@ router.beforeEach(async (to, from) => {
   })
   if (setupGate !== true) return setupGate
 
+  const joinGate = resolveJoinRedirect(to, {
+    localMode: () => setup.mode === 'local',
+    membershipEnabled: () => setup.membershipEnabled,
+  })
+  if (joinGate !== true) return joinGate
+
   return guardConsoleEntry(to, from, {
     isSignedIn: () => session.isSignedIn,
     loaded: () => session.loaded,
     serviceUnavailable: () => session.serviceUnavailable,
     load: () => session.load(),
     redirectToSectlLogin,
+    localMode: () => setup.mode === 'local',
   })
 })

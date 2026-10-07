@@ -44,19 +44,19 @@ function meta(serverTime?: string): ServerMeta {
   }
 }
 
-async function mountHome(options: { membershipEnabled?: boolean } = {}) {
+async function mountHome(options: { membershipEnabled?: boolean; local?: boolean } = {}) {
   const pinia = createPinia()
   setActivePinia(pinia)
 
   
-  if (options.membershipEnabled === false) {
+  if (options.membershipEnabled === false || options.local === true) {
     const setup = useSetupStore(pinia)
     setup.loaded = true
     setup.status = {
       initialized: true,
       mode: 'local',
       display_name: '测试实例',
-      membership_enabled: false,
+      membership_enabled: options.membershipEnabled !== false,
       modes: [],
     }
   }
@@ -86,6 +86,29 @@ async function mountHome(options: { membershipEnabled?: boolean } = {}) {
 
 const copyright = (wrapper: Awaited<ReturnType<typeof mountHome>>) =>
   wrapper.get('[data-testid="copyright"]').text()
+
+describe('HomeView hero 文案', () => {
+  beforeEach(() => {
+    serverMeta.mockReset()
+  })
+
+  it('本地模式：重复的副标题已删除，描述不再提账号', async () => {
+    serverMeta.mockResolvedValue(meta())
+    const wrapper = await mountHome({ local: true })
+
+    expect(wrapper.text()).not.toContain('SecRandom 集控平台')
+    expect(wrapper.text()).toContain(zhCN.home.descriptionLocal)
+    expect(wrapper.text()).not.toContain(zhCN.home.description)
+  })
+
+  it('非本地模式：描述仍是带账号的口径，重复的副标题同样不出现', async () => {
+    serverMeta.mockResolvedValue(meta())
+    const wrapper = await mountHome()
+
+    expect(wrapper.text()).not.toContain('SecRandom 集控平台')
+    expect(wrapper.text()).toContain(zhCN.home.description)
+  })
+})
 
 describe('HomeView 页脚版权', () => {
   beforeEach(() => {

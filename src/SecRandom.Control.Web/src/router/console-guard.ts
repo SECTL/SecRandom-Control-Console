@@ -24,6 +24,8 @@ export interface ConsoleGuardContext {
   load: () => Promise<void>
   
   redirectToSectlLogin: (returnTo: string) => void
+
+  localMode: () => boolean
 }
 
 
@@ -55,6 +57,8 @@ export async function guardConsoleEntry(
   
   if (context.serviceUnavailable()) return LOGIN_ROUTE
 
+  if (context.localMode()) return localLoginPath(to.fullPath)
+
   context.redirectToSectlLogin(to.fullPath)
   return false
 }
@@ -68,4 +72,12 @@ export async function guardConsoleEntry(
 
 export function redirectToSectlLogin(returnTo: string): void {
   window.location.assign(`/api/auth/login?return_to=${encodeURIComponent(returnTo)}`)
+}
+
+export function localLoginPath(returnTo: string): string {
+  return `${LOGIN_ROUTE}?return_to=${encodeURIComponent(returnTo)}`
+}
+
+export function redirectToLocalLogin(returnTo: string): void {
+  window.location.assign(localLoginPath(returnTo))
 }

@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
 import { LogOut, LoaderCircle } from '@lucide/vue'
 import { useSessionStore } from '@/stores/session'
+import { useSetupStore } from '@/stores/setup'
 import { useSignOut } from '@/composables/useSignOut'
 import ConsoleIcon from '@/components/ConsoleIcon.vue'
 
@@ -29,6 +30,7 @@ const props = withDefaults(defineProps<{ variant?: 'sidebar' | 'topbar' }>(), {
 
 const { t } = useI18n()
 const session = useSessionStore()
+const setup = useSetupStore()
 const route = useRoute()
 const { signingOut, failed, signOut, reset } = useSignOut()
 
@@ -43,6 +45,10 @@ const trigger = ref<HTMLButtonElement | null>(null)
 
 const displayName = computed(() => session.user?.display_name || session.user?.user_id || '')
 const initial = computed(() => displayName.value.slice(0, 1) || '?')
+
+const signedInViaKey = computed(() =>
+  setup.mode === 'local' ? 'console.signedInViaLocal' : 'console.signedInViaSectl',
+)
 
 const triggerClass = computed(() =>
   isTopBar.value
@@ -114,7 +120,7 @@ watch(() => route.fullPath, () => close())
       
       <span v-if="!isTopBar" class="min-w-0 flex-1">
         <span class="block truncate text-[12.5px] font-medium">{{ displayName }}</span>
-        <span class="block text-[11px] text-text-faint">{{ t('console.signedInViaSectl') }}</span>
+        <span class="block text-[11px] text-text-faint">{{ t(signedInViaKey) }}</span>
       </span>
       
       <span v-else class="hidden max-w-[9rem] truncate text-[12.5px] font-medium sm:block">{{ displayName }}</span>
