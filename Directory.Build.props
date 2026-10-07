@@ -1,0 +1,86 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- 可复现构建：CI 与本地产出应一致 -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- ==========================================================================
+       版本号 = 部署日期
+
+       规则：**年.月.日**，例如 `2026.10.07` —— 控制台页脚、`GET /v1/meta` 的
+       `server_version`、`FileVersion` / `AssemblyInformationalVersion` 都是它。
+
+       为什么是日期而不是 `主.次.<提交数>`：这套版本号是给**用户和排障**看的，用户真正要
+       知道的是"我这台装的是哪天的版本、该不该升"。提交数答不上这个问题，还得靠人记住
+       "这一版是几号发出去的"。日期自带答案，且不需要任何人记得改版本号、不需要打 tag、
+       不需要维护发布清单。
+
+       日期取自 **HEAD 的提交日期**（`git log -1` 带 `date=iso`），不是"构建那天的挂钟"：
+       同一个提交在谁机器上、在哪台 CI 上构建，都得到同一个版本号（可复现）；同一个提交
+       重编十次，版本号也不会跟着日子漂。
+
+       兜底与开关：
+       · 没有 `.git`（源码包 / Docker 构建上下文排除了 .git）⇒ 用**构建当天的本地日期**，
+         不影响构建；要固定就显式传 `-p:VersionDate=2026-10-07`；
+       · `-p:VersionDate=<yyyy-MM-dd>`（同上，等价写法）⇒ 强制指定日期。发布流水线按 tag
+         传入，让 "tag 名 = 二进制里的版本号" 严格一致；隔离环境排障也用它；
+       · `-p:AutoVersion=false` ⇒ 完全不自动取名，退回 `主.次.0`。
+      ========================================================================== -->
+  <PropertyGroup>
+    <!-- 兜底版本；`AutoVersion=false` 时用的就是它。 -->
+    <VersionMajor Condition="'$(VersionMajor)' == ''">0</VersionMajor>
+    <VersionMinor Condition="'$(VersionMinor)' == ''">1</VersionMinor>
+    <Version Condition="'$(Version)' == ''">$(VersionMajor).$(VersionMinor).0</Version>
+  </PropertyGroup>
+
+  <!--
+    必须在 `GetAssemblyVersion;GenerateAssemblyInfo` 之前算出来：AssemblyVersion /
+    FileVersion / AssemblyInformationalVersion 都是在这一步从 `$(Version)` 生成的。
+  -->
+  <Target Name="ApplyDeployDateVersion" BeforeTargets="GetAssemblyVersion;GenerateAssemblyInfo"
+          Condition="'$(AutoVersion)' != 'false'">
+    <!-- 取 HEAD 的提交日期（`2026-10-05 01:23:45 +0800`）。没有 .git 就整段跳过，
+         下面回落到构建当天的本地日期。 -->
+    <!-- `cd $(MSBuildThisFileDirectory)`：Git 找 `.git` 是从**当前目录往上**找的，
+         不落到仓库根就可能被 Docker 的 `/src` 之类上层目录里的无关仓库劫持，
+         把一个别人的提交日期当成本项目版本号；`-C` 把目标钉死在仓库根。 -->
+    <Exec Command="git -C &quot;$(MSBuildThisFileDirectory).&quot; log -1 --date=iso --format=%cd"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="low"
+          StandardErrorImportance="low"
+          IgnoreExitCode="true"
+          Condition="Exists('$(MSBuildThisFileDirectory).git')">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_VersionCommitDateRaw" />
+    </Exec>
+
+    <PropertyGroup>
+      <!-- Exec 把整块 stdout 按行带回来：拼成一串后只截前 10 个字符（yyyy-MM-dd）。 -->
+      <_VersionCommitDate>@(_VersionCommitDateRaw->'%(Identity)')</_VersionCommitDate>
+      <_VersionCommitDate Condition="'$(_VersionCommitDate)' != ''">$([System.String]::Copy('$(_VersionCommitDate)').Substring(0, 10))</_VersionCommitDate>
+      <!-- 拿不到提交日期（无 .git、浅克隆、没装 git）就用当天的本地日期。 -->
+      <VersionDate Condition="'$(VersionDate)' == '' and '$(_VersionCommitDate)' == ''">$([System.DateTime]::Now.ToString('yyyy-MM-dd'))</VersionDate>
+      <VersionDate Condition="'$(VersionDate)' == '' and '$(_VersionCommitDate)' != ''">$(_VersionCommitDate)</VersionDate>
+
+      <!-- 年月日拆成三段数字。格式不对（含手传 `-p:VersionDate=`）就整体退回兜底版本 0.1.0，
+           绝不产出畸形版本号。 -->
+      <_VersionDateIsValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(VersionDate)', '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))</_VersionDateIsValid>
+      <_VersionYear Condition="'$(_VersionDateIsValid)' == 'true'">$([System.String]::Copy('$(VersionDate)').Substring(0, 4))</_VersionYear>
+      <_VersionMonth Condition="'$(_VersionYear)' != ''">$([System.String]::Copy('$(VersionDate)').Substring(5, 2))</_VersionMonth>
+      <_VersionDay Condition="'$(_VersionYear)' != ''">$([System.String]::Copy('$(VersionDate)').Substring(8, 2))</_VersionDay>
+
+      <Version Condition="'$(_VersionDay)' != ''">$(_VersionYear).$(_VersionMonth).$(_VersionDay)</Version>
+    </PropertyGroup>
+  </Target>
+
+</Project>

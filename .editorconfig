@@ -10,3 +10,23 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+# ── 服务端（.NET）：与仓库内既有 C# 代码保持一致，4 空格缩进 ────────────────
+[*.cs]
+indent_size = 4
+
+[*.{csproj,props,targets,slnx}]
+indent_size = 2
+
+# ── 配置与工作流 ────────────────────────────────────────────────────────────
+[*.{yml,yaml,json,jsonc}]
+indent_size = 2
+
+[*.sh]
+indent_size = 2
+
+[Dockerfile*]
+indent_size = 4
+
+[*.{resx,xml}]
+indent_size = 2

@@ -1,0 +1,233 @@
+# 发版：推一个版本 tag → 建 GitHub Release + 把镜像推到 GHCR
+#
+#   git tag v2026.10.07
+#   git push origin v2026.10.07
+#
+# 版本号 = **部署日期**（根目录 Directory.Build.props 定义）：tag 名就是版本号，`v` 后面三段
+# 分别对应 年.月.日。流水线把 tag 里的日期当 `-p:VersionDate=` 交给构建，所以 Release 页面上的
+# tag、附件里的二进制、镜像里的 `GET /v1/meta → server_version` 三者一定一致 —— 不会出现
+# "tag 写 07 号、二进制却是 05 号"这种没法对齐的情况。
+#
+# 两条产物：
+#   1. Release 附件 —— `secrandom-control-<版本>-linux-x64.tar.gz`（自包含，解包即用）、
+#      `version.json`、`SHA256SUMS`；
+#   2. GHCR 镜像 `ghcr.io/sectl/secrandom-control-console:<版本>`（另打 `<sha>` 与 `latest`）——
+#      用户不需要装 .NET / Node，`docker compose up -d` 直接拉。
+#
+# ⚠️ 首次发布后要把这个 package 的可见性改成 public（GitHub → Packages → Package settings →
+#    Danger Zone → Change visibility），否则仓库外的用户 `docker pull` 会 403。详见 deploy/README.md。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+# 默认最小权限；需要写权限的 job 各自声明。
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/sectl/secrandom-control-console
+
+jobs:
+  # tag 形状不对就别建产物 —— 版本号是给人看的，格式错等于发了个没法用的版本。
+  validate:
+    name: 校验 tag（形如 v2026.10.07）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 1
+
+      - name: 校验 tag 是 v + 部署日期
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}$ ]]; then
+            echo "::error::tag 必须是 v 加部署日期，例如 v2026.10.07（收到：$TAG）"
+            exit 1
+          fi
+          version="${TAG#v}"
+          date_part="${version//./-}"
+          if ! date -d "$date_part" +%Y-%m-%d >/dev/null 2>&1; then
+            echo "::error::tag 里的日期不是有效日期（收到：$TAG，解析为 $date_part）"
+            exit 1
+          fi
+          echo "版本号 $version（部署日期 $date_part）"
+
+      # tag 日期就是发布出去的版本号（下面的构建会把它显式传给 -p:VersionDate），所以这里
+      # **只提醒、不拦截**：有人在一个两天前的提交上打今天的 tag 是合理操作（今天才决定发），
+      # 把这个差异说出来就够了，不值得为此挡住整个发布。
+      - name: 提醒 tag 日期与提交日期的差异
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          tag_date="${TAG#v}"; tag_date="${tag_date//./-}"
+          commit_date="$(git log -1 --date=short --format=%cd)"
+          if [ "$tag_date" != "$commit_date" ]; then
+            echo "::warning::tag 的日期（$tag_date）与该提交的日期（$commit_date）不一致：这一版发布出去后，页脚显示的是 tag 的日期 $tag_date。"
+          else
+            echo "tag 日期与提交日期一致（$tag_date）。"
+          fi
+
+  release:
+    name: 建 Release
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: "10.0.x"
+
+      # 不用 node-version-file：package.json 里 engines 是 `>=20.19.0` 这种范围，
+      # setup-node 只接受精确版本，会直接报错。这里钉 24（与 deploy/Dockerfile 的 node:24 一致）。
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: src/SecRandom.Control.Web/package-lock.json
+
+      - name: 解析版本（tag 名即版本号）
+        id: v
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "date=${version//./-}" >> "$GITHUB_OUTPUT"
+
+      - name: 构建控制台 SPA
+        run: |
+          npm ci --prefix src/SecRandom.Control.Web
+          npm run build --prefix src/SecRandom.Control.Web
+          test -d artifacts/web || { echo "::error::未生成 artifacts/web" >&2; exit 1; }
+
+      - name: 发布 linux-x64 自包含产物（版本号取自 tag）
+        run: |
+          dotnet publish src/SecRandom.Control/SecRandom.Control.csproj \
+            -c Release -r linux-x64 --self-contained true -o dist/server \
+            -p:VersionDate="${{ steps.v.outputs.date }}"
+
+      # 发布前的自检：tag 名与二进制里真正写进去的版本号必须一致。
+      # ⚠️ 两边格式不同：`steps.v.outputs.date` 是 ISO 的 `2026-09-01`（给 -p:VersionDate 用），
+      #    而二进制里是版本号的写法 `2026.09.01`。所以先把 date 换成点号再比 ——
+      #    否则这个自检永远失败，等于发不出任何版本。
+      - name: 校验二进制里的版本号
+        env:
+          VERSION_DATE: ${{ steps.v.outputs.date }}
+        run: |
+          expected="${VERSION_DATE//-/.}"
+          actual="$(strings dist/server/SecRandom.Control.dll | grep -m1 -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' || true)"
+          echo "二进制里读到的版本号：${actual:-（没找到）}，tag 版本号：$expected"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::二进制版本号（${actual:-空}）与 tag（$expected）不一致" >&2
+            exit 1
+          fi
+
+      - name: 打包发布附件
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          # 控制台应当是 publish 时自动从 artifacts/web 复制进 wwwroot 的；没进去就是包不完整，
+          # 直接失败 —— 附件的意义是"解包即用"，不能给出一个首页 404 的包。
+          test -f dist/server/wwwroot/index.html || { echo "::error::dist/server/wwwroot 里没有 index.html" >&2; exit 1; }
+          # 版本元信息与二进制同级：裸机跑 dist/server 时，GET /version.json 就能看到装的是哪一版。
+          mkdir -p dist/deploy
+          cp deploy/README.md deploy/nginx.conf deploy/secrandom-control.service \
+             deploy/.env.example deploy/docker-compose.yml deploy/docker-compose.build.yml dist/deploy/
+          printf '{"version":"%s","date":"%s","revision":"%s","builtAt":"%s"}\n' \
+            "$VERSION" "${{ steps.v.outputs.date }}" "${{ github.sha }}" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist/server/version.json
+          # 单个 -C：多目录打包用一次就够了，省得 tar 的 -C 语义把人绕进去。
+          tar -czf "dist/secrandom-control-${VERSION}-linux-x64.tar.gz" -C dist server deploy
+          ( cd dist && sha256sum "secrandom-control-${VERSION}-linux-x64.tar.gz" > SHA256SUMS )
+          ls -lh dist
+
+      # 用 runner 自带的 gh，而不是第三方 action：少一个要跟进的安全更新点。
+      # 说明正文写成 heredoc（分隔符加引号 ⇒ 里面不做变量展开、反引号也不会被当命令执行），
+      # 版本号与镜像名由 Actions 表达式直接替换进正文，省得在命令行里堆一长串转义引号。
+      - name: 建 Release 并上传附件
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > release-notes.md <<'NOTES'
+          版本号即部署日期：`${{ steps.v.outputs.version }}`。
+
+          ## 安装
+
+          Docker（推荐：宿主机不用装 .NET / Node）：
+
+          ```bash
+          cd deploy && cp .env.example .env && vi .env
+          docker compose up -d
+          ```
+
+          裸机 / 内网（用本页附件，已构建好控制台，解包即用）：
+
+          ```bash
+          tar -xzf secrandom-control-${{ steps.v.outputs.version }}-linux-x64.tar.gz
+          ./server/SecRandom.Control
+          ```
+
+          容器镜像：`${{ env.IMAGE }}:${{ steps.v.outputs.version }}`（另有 `:latest`）。
+
+          部署说明见附件里的 `deploy/README.md`，或 <https://secrandom.sectl.cn/doc/control/self-host>。
+          NOTES
+
+          gh release create "v${{ steps.v.outputs.version }}" \
+            --title "v${{ steps.v.outputs.version }}（部署日期 ${{ steps.v.outputs.version }}）" \
+            --notes-file release-notes.md \
+            --generate-notes \
+            "dist/secrandom-control-${{ steps.v.outputs.version }}-linux-x64.tar.gz" \
+            dist/SHA256SUMS
+
+  image:
+    name: 推镜像到 GHCR
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+
+      - name: 登录 GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 解析版本
+        id: v
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "date=${version//./-}" >> "$GITHUB_OUTPUT"
+
+      # 每个 tag 发三个镜像 tag：具体日期（可钉版本）、commit sha（可追溯）、latest（跟最新）。
+      - name: 构建并推送 amd64 + arm64
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION_DATE=${{ steps.v.outputs.date }}
+            VCS_REF=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.v.outputs.version }}
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest

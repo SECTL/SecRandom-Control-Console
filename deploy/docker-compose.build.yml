@@ -1,0 +1,22 @@
+# SecRandom 集控 · 自建实例（本地构建覆盖文件）
+#
+# 只在"我要自己构建镜像"时用，单独使用没有意义：
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# 构建上下文是**仓库根目录**（`..`）：deploy/Dockerfile 要拿到 src/ 与 scripts/。
+# 版本号 = 部署日期（见根目录 Directory.Build.props）：`.dockerignore` 排除了 `.git`，
+# 容器里算不出提交日期，所以构建方要把日期传进来，否则用构建当天的日期：
+#
+#   VERSION_DATE=2026-10-07 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+services:
+  control:
+    # 本地构建出来的镜像单独打一个 `:local` tag，不去覆盖 `docker-compose.yml` 里那个
+    # GHCR 名字 —— 免得哪天以为是官方镜像，其实是上个月自己编的。
+    image: secrandom-control:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        VERSION_DATE: ${VERSION_DATE:-}

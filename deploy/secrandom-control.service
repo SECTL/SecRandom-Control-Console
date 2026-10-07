@@ -1,0 +1,74 @@
+# SecRandom 集控 · systemd 单元（裸机部署，不跑容器时用）
+#
+# 安装：
+#   sudo useradd --system --home /var/lib/secrandom-control --shell /usr/sbin/nologin secrandom-control
+#   sudo mkdir -p /opt/secrandom-control/current /var/lib/secrandom-control
+#   # 把发布产物（dotnet publish 的输出）放进 /opt/secrandom-control/current
+#   sudo chown -R secrandom-control:secrandom-control /var/lib/secrandom-control
+#   sudo install -m 600 -o root -g root /dev/null /etc/secrandom-control.env   # 再填内容
+#   sudo cp deploy/secrandom-control.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now secrandom-control
+#
+# 配置只从 EnvironmentFile 读（unit 文件通常是 0644，把密钥写进这里等于公开）。
+
+[Unit]
+Description=SecRandom 集控（自建实例）
+Documentation=https://github.com/SECTL/SecRandom-Control-Console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# 专用系统账号：不拥有登录 shell，也不该有 sudo。
+User=secrandom-control
+Group=secrandom-control
+
+WorkingDirectory=/opt/secrandom-control/current
+ExecStart=/opt/secrandom-control/current/SecRandom.Control
+
+# 密钥与配置（chmod 600 root:root）。这一段里最常见的内容见 deploy/.env.example。
+EnvironmentFile=/etc/secrandom-control.env
+
+# 不在 .env 里重复的固定项：
+#   - 监听回环，外部一律走 nginx（TLS 在那一层终止）
+#   - 数据根目录必须与下面的 ReadWritePaths 一致
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=CTRL_LISTEN_URL=http://127.0.0.1:8791
+Environment=CTRL_DATA_ROOT=/var/lib/secrandom-control
+
+# 注意：Data Protection 密钥环默认在数据根目录下（keys/data-protection）。
+# 它必须持久化 —— 丢了它，每次重启所有控制台会话都会失效、所有人要重新登录。
+
+Restart=on-failure
+RestartSec=3
+
+# ── 沙箱 ────────────────────────────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictNamespaces=true
+
+# ⚠️ 不要打开 MemoryDenyWriteExecute：.NET 的 JIT 需要可写可执行页，
+#    打开它服务会直接起不来（而且报错信息不会告诉你原因）。
+
+# 唯一可写目录：SQLite 库、会话文件、密钥环、初始化配置都在这里。
+ReadWritePaths=/var/lib/secrandom-control
+
+# 数据目录里全是会话与令牌，默认权限收紧。
+UMask=0077
+
+# 反向代理在同机，不需要 80/443 之类的特权端口。
+AmbientCapabilities=
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

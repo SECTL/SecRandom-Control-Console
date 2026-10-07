@@ -1,11 +1,38 @@
+# 全仓库按 LF 存盘；Windows 检出时由 Git 自行处理。
 * text=auto eol=lf
 
+# ── 二进制：不要做行尾或编码转换 ────────────────────────────────────────────
 *.png binary
 *.jpg binary
+*.jpeg binary
+*.gif binary
 *.ico binary
+*.woff binary
 *.woff2 binary
+*.ttf binary
+*.db binary
+*.pfx binary
 
+# ── 明确按 LF：会被 Linux 容器 / shell / dotnet CLI 直接读的文件 ────────────
 *.sh text eol=lf
 *.mjs text eol=lf
 *.ts text eol=lf
 *.vue text eol=lf
+*.cs text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.slnx text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.resx text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+# ── 语言统计：不让生成物污染仓库语言占比 ────────────────────────────────────
+artifacts/** linguist-generated=true
+src/SecRandom.Control/wwwroot/** linguist-generated=true
+src/SecRandom.Control.Web/public/fonts/** linguist-vendored=true

@@ -1,0 +1,46 @@
+# 构建上下文排除项（deploy/Dockerfile 的上下文是仓库根目录）
+#
+# 目标：让镜像里只有源码。依赖、构建产物、数据与仓库元信息都不该进去。
+
+# ── 版本控制与仓库元信息 ─────────────────────────────────────────────────────
+.git
+.gitattributes
+.gitignore
+.github
+.kagent
+
+# ── 依赖与构建产物（镜像内重新装、重新编） ───────────────────────────────────
+**/node_modules
+**/dist
+**/bin
+**/obj
+artifacts
+src/SecRandom.Control/wwwroot
+
+# ── 本地数据与密钥：绝不进镜像 ───────────────────────────────────────────────
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+**/*.pfx
+**/*.pem
+**/*.key
+
+# ── 文档与部署脚本：镜像不需要 ──────────────────────────────────────────────
+docs
+tests
+deploy/README.md
+deploy/nginx.conf
+deploy/*.service
+*.md
+
+# ── 杂项 ────────────────────────────────────────────────────────────────────
+**/*.log
+.DS_Store
+Thumbs.db
+.vs
+.idea
+.vscode

@@ -1,0 +1,57 @@
+# SecRandom 集控 · 自建实例（单机 Docker Compose）
+#
+#   cd deploy && cp .env.example .env && vi .env
+#   docker compose up -d
+#
+# **默认拉取官方发布好的镜像**（GHCR）：宿主机不需要 .NET SDK、不需要 Node，联网即可。
+# 版本号就是**部署日期**：`2026.10.07` 表示 2026-10-07 那一版，`latest` 跟最新一版。
+# 想钉住某一版不跟着升级，就把下面的 tag 写死成具体日期。
+#
+# 想自己从源码构建（没网、要改代码、信不过官方镜像）→ 追加 build 覆盖文件：
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# 默认只把端口绑在回环地址上：外部访问走 deploy/nginx.conf（TLS + WebSocket）或你自己的
+# 反向代理。直接把 8791 开到公网的后果见 README 的"不要这样做"。
+#
+# 数据（SQLite、会话、密钥环、初始化配置）全在命名卷里 —— 备份它、别删它。
+
+name: secrandom-control
+
+services:
+  control:
+    # `latest` 跟最新发布；要固定版本就改成 `2026.10.07` 这类具体日期。
+    # 镜像名可用环境变量覆盖，便于走内网镜像站：CTRL_IMAGE=registry.example.com/xxx/yyy
+    image: ${CTRL_IMAGE:-ghcr.io/sectl/secrandom-control-console}:${CTRL_IMAGE_TAG:-latest}
+    container_name: secrandom-control
+
+    restart: unless-stopped
+
+    # 里面有密钥：chmod 600 .env。
+    env_file:
+      - .env
+
+    environment:
+      # 容器里必须监听 0.0.0.0，否则宿主机的端口映射进不来。
+      # 真正决定"谁能访问"的是下面的端口绑定与反向代理。
+      CTRL_LISTEN_URL: http://0.0.0.0:8791
+      CTRL_DATA_ROOT: /data
+      ASPNETCORE_ENVIRONMENT: Production
+
+    volumes:
+      - control-data:/data
+
+    ports:
+      # ⚠️ 故意绑 127.0.0.1：只给同机的反向代理用。
+      #    要让内网别的机器直连，先读 README 里的 TLS 要求 —— 客户端只接受 https，
+      #    或 http + 127.0.0.1，明文 http 到内网 IP 会被客户端拒绝。
+      - "127.0.0.1:8791:8791"
+
+    logging:
+      driver: json-file
+      options:
+        # 日志里有节点接入、认证失败、首次初始化的首装令牌 —— 别让它写满磁盘。
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  control-data:
