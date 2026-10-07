@@ -27,7 +27,25 @@ using SecRandom.Control.Transport;
 
 
 
-var builder = WebApplication.CreateBuilder(args);
+var appWebRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+var contentRoot = Environment.GetEnvironmentVariable("ASPNETCORE_CONTENTROOT");
+if (string.IsNullOrWhiteSpace(contentRoot))
+{
+    contentRoot = Directory.GetCurrentDirectory();
+}
+
+var hostWebRootConfigured = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_WEBROOT"));
+foreach (var argument in args)
+{
+    if (argument.StartsWith("--webroot", StringComparison.OrdinalIgnoreCase) || argument.StartsWith("--contentRoot", StringComparison.OrdinalIgnoreCase))
+    {
+        hostWebRootConfigured = true;
+    }
+}
+
+var builder = !hostWebRootConfigured && !Directory.Exists(Path.Combine(contentRoot, "wwwroot")) && Directory.Exists(appWebRoot)
+    ? WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, WebRootPath = appWebRoot })
+    : WebApplication.CreateBuilder(args);
 
 var control = ControlOptions.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton(Options.Create(control));
